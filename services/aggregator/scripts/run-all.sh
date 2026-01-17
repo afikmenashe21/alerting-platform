@@ -45,7 +45,7 @@ echo ""
 
 # Step 2: Verify centralized infrastructure
 echo_step "2/4 Verifying centralized infrastructure..."
-if ! "$ROOT_DIR/scripts/verify-dependencies.sh"; then
+if ! "$ROOT_DIR/scripts/infrastructure/verify-dependencies.sh"; then
     echo_error "Infrastructure dependencies are not available"
     echo_error "Start infrastructure with: cd $ROOT_DIR && make setup-infra"
     exit 1

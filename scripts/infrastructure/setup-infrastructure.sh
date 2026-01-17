@@ -169,7 +169,7 @@ done
 
 echo ""
 echo_success "All infrastructure services are running"
-echo_info "Run './scripts/verify-dependencies.sh' to verify connectivity"
+echo_info "Run './scripts/infrastructure/verify-dependencies.sh' to verify connectivity"
 echo_info ""
 echo_info "MailHog Web UI: http://localhost:8025 (view captured emails)"
 echo_info "MailHog SMTP: localhost:1025 (for sending emails)"

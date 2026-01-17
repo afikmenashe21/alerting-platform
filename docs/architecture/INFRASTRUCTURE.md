@@ -64,7 +64,7 @@ This creates all Kafka topics used by the platform.
 1. **Verify dependencies exist** before starting:
    ```bash
    # In service's run script
-   ../../scripts/verify-dependencies.sh || exit 1
+   ../../scripts/infrastructure/verify-dependencies.sh || exit 1
    ```
 
 2. **Connect to shared infrastructure**:

@@ -6,7 +6,7 @@ This document identifies redundant files and code across services after centrali
 
 ### Migrations (`services/*/migrations/`)
 **Status: KEEP** - These are required!
-- The centralized migration runner (`scripts/run-migrations.sh`) reads from `services/*/migrations/` directories
+- The centralized migration runner (`scripts/migrations/run-migrations.sh`) reads from `services/*/migrations/` directories
 - Migrations are organized by service but run centrally
 - Location: `services/rule-service/migrations/`, `services/aggregator/migrations/`
 

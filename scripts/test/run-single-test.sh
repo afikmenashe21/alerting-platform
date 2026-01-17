@@ -50,7 +50,7 @@ echo ""
 
 # Step 2: Verify infrastructure (Kafka)
 echo_info "Verifying Kafka is running..."
-if ! "$ROOT_DIR/scripts/verify-dependencies.sh" > /dev/null 2>&1; then
+if ! "$ROOT_DIR/scripts/infrastructure/verify-dependencies.sh" > /dev/null 2>&1; then
     echo_error "Infrastructure is not running"
     echo_error "Start infrastructure with: make setup-infra"
     exit 1

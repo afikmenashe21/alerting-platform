@@ -21,7 +21,7 @@
 ### Migrations
 - ✅ **KEPT**: All migration files in `services/*/migrations/`
   - These are required by the centralized migration runner
-  - The runner reads from service directories: `scripts/run-migrations.sh` searches `services/*/migrations/`
+  - The runner reads from service directories: `scripts/migrations/run-migrations.sh` searches `services/*/migrations/`
 
 ### Service Scripts
 - ✅ **KEPT**: All `services/*/scripts/run-all.sh` files

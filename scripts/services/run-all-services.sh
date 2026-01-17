@@ -61,13 +61,13 @@ echo ""
 echo_step "1/3 Verifying centralized infrastructure..."
 # Temporarily disable set -e for this check
 set +e
-VERIFY_OUTPUT=$("$ROOT_DIR/scripts/verify-dependencies.sh" 2>&1)
+VERIFY_OUTPUT=$("$ROOT_DIR/scripts/infrastructure/verify-dependencies.sh" 2>&1)
 VERIFY_EXIT_CODE=$?
 set -e
 
 if [ $VERIFY_EXIT_CODE -ne 0 ]; then
     echo_warn "Infrastructure is not running, starting it now..."
-    "$ROOT_DIR/scripts/setup-infrastructure.sh" || {
+    "$ROOT_DIR/scripts/infrastructure/setup-infrastructure.sh" || {
         echo_error "Failed to start infrastructure"
         exit 1
     }
@@ -75,7 +75,7 @@ if [ $VERIFY_EXIT_CODE -ne 0 ]; then
     sleep 3
     # Verify again after starting
     echo_info "Re-verifying infrastructure..."
-    "$ROOT_DIR/scripts/verify-dependencies.sh" || {
+    "$ROOT_DIR/scripts/infrastructure/verify-dependencies.sh" || {
         echo_error "Infrastructure started but verification failed"
         exit 1
     }
@@ -87,7 +87,7 @@ echo ""
 
 # Step 2: Run migrations (idempotent - safe to run multiple times)
 echo_step "2/3 Running database migrations..."
-if "$ROOT_DIR/scripts/run-migrations.sh"; then
+if "$ROOT_DIR/scripts/migrations/run-migrations.sh"; then
     echo_success "Migrations are up to date"
 else
     echo_error "Migration check failed"

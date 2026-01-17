@@ -26,13 +26,13 @@ help:
 
 # Infrastructure management
 setup-infra:
-	@./scripts/setup-infrastructure.sh
+	@./scripts/infrastructure/setup-infrastructure.sh
 
 verify-deps:
-	@./scripts/verify-dependencies.sh
+	@./scripts/infrastructure/verify-dependencies.sh
 
 run-migrations:
-	@./scripts/run-migrations.sh
+	@./scripts/migrations/run-migrations.sh
 
 # Check migration consistency across all services
 check-migrations:
@@ -101,38 +101,38 @@ migration-status:
 
 # Create all Kafka topics
 create-topics:
-	@./scripts/create-kafka-topics.sh
+	@./scripts/infrastructure/create-kafka-topics.sh
 
 # Generate test data (100 clients with rules and endpoints)
 generate-test-data:
-	@./scripts/test-data/generate-test-data.sh
+	@./scripts/test/test-data/generate-test-data.sh
 
 # Run all services
 run-all:
-	@./scripts/run-all-services.sh
+	@./scripts/services/run-all-services.sh
 
 # Run all services in background
 run-all-bg:
-	@./scripts/run-all-services.sh --background
+	@./scripts/services/run-all-services.sh --background
 
 # Run alert-producer in a separate terminal (on-demand)
 run-producer:
-	@./scripts/run-single-service.sh alert-producer
+	@./scripts/services/run-single-service.sh alert-producer
 
 # Send a single test alert (LOW/test-source/test-name)
 run-single-test:
-	@./scripts/run-single-test.sh
+	@./scripts/test/run-single-test.sh
 
 # Stop all application services
 stop-services:
-	@./scripts/stop-all-services.sh
+	@./scripts/services/stop-all-services.sh
 
 # Stop infrastructure
 stop-infra:
-	@./scripts/stop-infrastructure.sh
+	@./scripts/infrastructure/stop-infrastructure.sh
 
 # Stop everything (services + infrastructure)
 stop-all:
-	@./scripts/stop-all-services.sh
+	@./scripts/services/stop-all-services.sh
 	@echo ""
-	@./scripts/stop-infrastructure.sh
+	@./scripts/infrastructure/stop-infrastructure.sh

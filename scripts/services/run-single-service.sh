@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run a single service in a separate terminal
-# Usage: ./scripts/run-single-service.sh <service-name>
+# Usage: ./scripts/services/run-single-service.sh <service-name>
 
 set -e
 
@@ -52,7 +52,7 @@ fi
 
 # Verify infrastructure is running
 echo_info "Verifying infrastructure..."
-if ! "$ROOT_DIR/scripts/verify-dependencies.sh" > /dev/null 2>&1; then
+if ! "$ROOT_DIR/scripts/infrastructure/verify-dependencies.sh" > /dev/null 2>&1; then
     echo_error "Infrastructure is not running"
     echo_error "Start infrastructure with: make setup-infra"
     exit 1

@@ -42,9 +42,9 @@
 
 - **Centralized Infrastructure Management**: Created unified dependency management
   - Root `docker-compose.yml` for shared infrastructure (Postgres, Kafka, Redis, Zookeeper)
-  - Centralized verification script (`scripts/verify-dependencies.sh`)
-  - Centralized migration runner (`scripts/run-migrations.sh`)
-  - Centralized Kafka topic creation (`scripts/create-kafka-topics.sh`)
+  - Centralized verification script (`scripts/infrastructure/verify-dependencies.sh`)
+  - Centralized migration runner (`scripts/migrations/run-migrations.sh`)
+  - Centralized Kafka topic creation (`scripts/infrastructure/create-kafka-topics.sh`)
   - Services should verify dependencies, NOT manage them
   - `make run-all` automatically starts infrastructure if not running (one-command startup)
   - See `docs/architecture/INFRASTRUCTURE.md` for full documentation

@@ -57,7 +57,7 @@ cd aggregator && make run-all
 Each service `run-all.sh` script now:
 
 1. ✅ Checks Go installation
-2. ✅ Verifies centralized infrastructure (calls `scripts/verify-dependencies.sh`)
+2. ✅ Verifies centralized infrastructure (calls `scripts/infrastructure/verify-dependencies.sh`)
 3. ✅ Downloads Go dependencies
 4. ✅ Builds the service
 5. ✅ Runs the service
@@ -111,6 +111,6 @@ make create-topics
 - `INFRASTRUCTURE.md` - Complete infrastructure guide
 - `SETUP.md` - Setup instructions
 - `QUICKSTART.md` - Quick start guide
-- `scripts/verify-dependencies.sh` - Dependency verification
-- `scripts/run-migrations.sh` - Centralized migration runner
-- `scripts/create-kafka-topics.sh` - Centralized topic creation
+- `scripts/infrastructure/verify-dependencies.sh` - Dependency verification
+- `scripts/migrations/run-migrations.sh` - Centralized migration runner
+- `scripts/infrastructure/create-kafka-topics.sh` - Centralized topic creation

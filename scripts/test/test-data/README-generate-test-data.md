@@ -11,17 +11,17 @@ make generate-test-data
 
 ### Using the script directly
 ```bash
-./scripts/test-data/generate-test-data.sh
+./scripts/test/test-data/generate-test-data.sh
 ```
 
 ### With custom database connection
 ```bash
-POSTGRES_DSN="postgres://user:pass@host:port/dbname?sslmode=disable" ./scripts/test-data/generate-test-data.sh
+POSTGRES_DSN="postgres://user:pass@host:port/dbname?sslmode=disable" ./scripts/test/test-data/generate-test-data.sh
 ```
 
 Or:
 ```bash
-./scripts/test-data/generate-test-data.sh "postgres://user:pass@host:port/dbname?sslmode=disable"
+./scripts/test/test-data/generate-test-data.sh "postgres://user:pass@host:port/dbname?sslmode=disable"
 ```
 
 ## What it does

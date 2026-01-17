@@ -31,7 +31,7 @@ echo_error() {
 
 # Step 1: Verify dependencies (DO NOT start them)
 echo_info "Verifying dependencies..."
-if ! "$ROOT_DIR/scripts/verify-dependencies.sh"; then
+if ! "$ROOT_DIR/scripts/infrastructure/verify-dependencies.sh"; then
     echo_error "Dependencies are not available"
     echo_error "Start infrastructure with: cd $ROOT_DIR && make setup-infra"
     exit 1
