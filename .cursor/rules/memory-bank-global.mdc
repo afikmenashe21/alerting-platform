@@ -1,0 +1,51 @@
+---
+description: "Memory Bank (global + service-aware for alerting-platform)"
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# Memory Bank usage (global + service-aware)
+
+## At the start of every task
+
+1) Always read the global Memory Bank (if it exists):
+- memory-bank/projectbrief.md
+- memory-bank/techContext.md
+- memory-bank/systemPatterns.md
+- memory-bank/activeContext.md
+- memory-bank/progress.md
+
+2) If the current file/task is inside a service directory
+   (e.g. services/<service-name>/):
+
+- Also read the service-level Memory Bank (if it exists):
+  - services/<service-name>/memory-bank/techContext.md
+  - services/<service-name>/memory-bank/systemPatterns.md
+  - services/<service-name>/memory-bank/progress.md
+
+Do NOT assume a service Memory Bank exists — read it only if present.
+
+## While working
+
+- Follow global systemPatterns and techContext unless explicitly overridden
+  by the service-level Memory Bank.
+- Service-level Memory Bank takes precedence for service-specific decisions.
+- If information is missing or unclear, propose an update to the appropriate
+  Memory Bank (global or service-level).
+
+## At the end of completing a task
+
+1) Always update:
+- memory-bank/activeContext.md  
+  (current focus, next steps, cross-service implications)
+- memory-bank/progress.md  
+  (global decisions, shared changes, milestones)
+
+2) If the task affected a specific service:
+- Update that service’s:
+  - services/<service-name>/memory-bank/progress.md
+    (service-specific changes, decisions, constraints)
+
+Only write stable, long-lived knowledge.
+Do NOT add temporary notes, debugging output, or speculative ideas.

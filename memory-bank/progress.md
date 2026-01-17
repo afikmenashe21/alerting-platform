@@ -1,0 +1,50 @@
+# Alerting Platform – Progress
+
+## Decisions made
+- Kafka for replay + at-least-once.
+- Postgres for control-plane + notification idempotency boundary.
+- Redis snapshot for evaluator warmup.
+- JSON contracts, add schema_version.
+
+## Milestones
+- [x] Topic contracts finalized (JSON structs + sample payloads)
+- [x] Postgres migrations: clients/rules (rule-service)
+- [x] rule-service: CRUD + publish rule.changed
+- [x] rule-updater: rebuild snapshot → Redis + bump version
+- [x] evaluator: warmup + match + publish alerts.matched (one message per client_id)
+- [x] aggregator: dedupe insert + publish notifications.ready
+- [x] sender: consume notifications.ready + send via email (SMTP), Slack (webhook API), and webhook (HTTP POST) + update status
+- [x] alert-producer: generate alerts + load tests
+- [x] rule-service-ui: React UI for CRUD operations on clients, rules, and endpoints
+
+## Recent Decisions
+- **Evaluator output format**: One message per client_id (not one message with all matches)
+  - Enables tenant locality: messages partitioned by client_id
+  - Simplifies aggregator: one client per message
+  - If alert matches N clients, N messages are published
+
+- **Sender service design**: Multi-channel sender supporting email (SMTP), Slack (Incoming Webhooks), and webhooks (HTTP POST)
+  - Queries endpoints table for all endpoint types (email, slack, webhook) by rule_ids
+  - Routes to appropriate sender based on endpoint type
+  - Email: SMTP protocol with configurable server (defaults to localhost:1025 for local dev)
+  - Slack: Incoming Webhooks API with formatted messages and severity-based color coding
+  - Webhook: HTTP POST with JSON payload containing full notification details
+  - Idempotent: checks status before sending, updates after
+  - At-least-once delivery: safe to redeliver (skips if already SENT)
+  - Partial failures are logged but don't fail operation if at least one channel succeeds
+
+- **rule-service-ui**: React + Vite UI for rule-service management
+  - Full CRUD operations for clients, rules, and endpoints
+  - Modern UI with tabbed navigation
+  - Connects to rule-service API at http://localhost:8081 (via Vite proxy)
+  - Features: create, read, update, delete, toggle enable/disable for all entities
+  - Optimistic locking support for rule updates (version field)
+
+- **Centralized Infrastructure Management**: Created unified dependency management
+  - Root `docker-compose.yml` for shared infrastructure (Postgres, Kafka, Redis, Zookeeper)
+  - Centralized verification script (`scripts/verify-dependencies.sh`)
+  - Centralized migration runner (`scripts/run-migrations.sh`)
+  - Centralized Kafka topic creation (`scripts/create-kafka-topics.sh`)
+  - Services should verify dependencies, NOT manage them
+  - `make run-all` automatically starts infrastructure if not running (one-command startup)
+  - See `docs/architecture/INFRASTRUCTURE.md` for full documentation
