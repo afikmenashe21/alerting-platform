@@ -73,18 +73,20 @@ Check the debug logs to see the full email message being sent.
 Try sending a test email to yourself first:
 
 ```bash
-# Set environment variables
+# Set environment variables (use your actual credentials)
 export SMTP_HOST=smtp.gmail.com
 export SMTP_PORT=587
-export SMTP_USER=alert.system.notify.email@gmail.com
-export SMTP_PASSWORD=AlertsystemnotifyemailPassword123
-export SMTP_FROM=alert.system.notify.email@gmail.com
+export SMTP_USER=your-email@gmail.com
+export SMTP_PASSWORD=your-app-password
+export SMTP_FROM=your-email@gmail.com
 export LOG_LEVEL=DEBUG
 
 # Run sender and trigger a notification
 cd services/sender
 make run
 ```
+
+**Note**: Replace `your-email@gmail.com` and `your-app-password` with your actual Gmail credentials.
 
 ### Step 7: Check Gmail Account Status
 

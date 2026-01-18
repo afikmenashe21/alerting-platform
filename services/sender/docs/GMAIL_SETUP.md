@@ -9,25 +9,29 @@ Set these environment variables before running the sender service:
 ```bash
 export SMTP_HOST=smtp.gmail.com
 export SMTP_PORT=587
-export SMTP_USER=alert.system.notify.email@gmail.com
-export SMTP_PASSWORD=AlertsystemnotifyemailPassword123
-export SMTP_FROM=alert.system.notify.email@gmail.com
+export SMTP_USER=your-email@gmail.com
+export SMTP_PASSWORD=your-app-password
+export SMTP_FROM=your-email@gmail.com
 ```
+
+**Important**: Replace `your-email@gmail.com` with your actual Gmail address and `your-app-password` with a Gmail App Password (see below).
 
 ## Running with Gmail Configuration
 
 ```bash
-# Set environment variables
+# Set environment variables (use your actual credentials)
 export SMTP_HOST=smtp.gmail.com
 export SMTP_PORT=587
-export SMTP_USER=alert.system.notify.email@gmail.com
-export SMTP_PASSWORD=AlertsystemnotifyemailPassword123
-export SMTP_FROM=alert.system.notify.email@gmail.com
+export SMTP_USER=your-email@gmail.com
+export SMTP_PASSWORD=your-app-password
+export SMTP_FROM=your-email@gmail.com
 
 # Run the sender service
 cd services/sender
 make run
 ```
+
+**Note**: For security, consider using a `.env` file (see [`.env.example`](../.env.example) in the sender directory) or a secrets manager instead of exporting credentials directly.
 
 ## Important Notes
 

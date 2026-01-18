@@ -23,7 +23,13 @@ The sender service is the final step in the alerting platform pipeline:
 
 ## Documentation
 
+All documentation is available in the [`docs/`](docs/) directory:
+
+- **[Documentation Index](docs/README.md)** - Complete documentation index
 - **[Architecture](docs/ARCHITECTURE.md)** - Service architecture and design patterns
+- **[Gmail SMTP Setup](docs/GMAIL_SETUP.md)** - Complete guide for configuring Gmail SMTP
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions for email sending
+- **[Testing Guide](docs/TESTING.md)** - Testing strategies and test coverage
 
 ## Quick Start
 
@@ -86,23 +92,30 @@ The email sender can be configured via environment variables:
 - `SMTP_PASSWORD`: SMTP password (optional, required for authenticated SMTP)
 - `SMTP_FROM`: Email address to send from (default: `alerts@alerting-platform.local`)
 
+**Configuration Options:**
+- Use environment variables directly: `export SMTP_HOST=...`
+- Use a `.env` file: Copy `.env.example` to `.env` and fill in your credentials
+- Use a secrets manager in production environments
+
+See `.env.example` in the sender directory for a template.
+
 #### Gmail Configuration
 
-For Gmail SMTP, use these settings:
+For detailed Gmail SMTP setup instructions, see **[Gmail SMTP Setup Guide](docs/GMAIL_SETUP.md)**.
 
+Quick setup:
 ```bash
 export SMTP_HOST=smtp.gmail.com
 export SMTP_PORT=587
-export SMTP_USER=alert.system.notify.email@gmail.com
-export SMTP_PASSWORD=AlertsystemnotifyemailPassword123
-export SMTP_FROM=alert.system.notify.email@gmail.com
+export SMTP_USER=your-email@gmail.com
+export SMTP_PASSWORD=your-app-password
+export SMTP_FROM=your-email@gmail.com
 ```
 
-**Important Gmail Notes:**
-- Gmail requires an **App Password** (not your regular Gmail password) if 2-Step Verification is enabled
-- To generate an App Password: Google Account → Security → 2-Step Verification → App passwords
-- Port 587 uses STARTTLS (recommended)
-- Port 465 uses SSL/TLS (also supported)
+**Important**: 
+- Replace `your-email@gmail.com` with your actual Gmail address
+- Replace `your-app-password` with a Gmail App Password (required if 2FA is enabled)
+- Never commit credentials to version control - use environment variables or a `.env` file
 
 #### Local Testing with MailHog
 
@@ -216,10 +229,22 @@ sender/
 │   ├── events/
 │   │   └── events.go        # Event structures
 │   └── sender/
-│       └── sender.go        # Email sender
+│       ├── sender.go        # Multi-channel sender coordinator
+│       ├── email/           # Email sender implementation
+│       ├── slack/           # Slack sender implementation
+│       ├── webhook/         # Webhook sender implementation
+│       ├── strategy/        # Strategy pattern for senders
+│       └── payload/         # Payload builders
+├── docs/                    # 📚 All documentation
+│   ├── README.md           # Documentation index
+│   ├── ARCHITECTURE.md     # Architecture and design patterns
+│   ├── GMAIL_SETUP.md      # Gmail SMTP configuration guide
+│   ├── TROUBLESHOOTING.md  # Troubleshooting guide
+│   └── TESTING.md          # Testing guide
 ├── scripts/
 │   └── run-all.sh           # Setup and run script
-├── docker-compose.yml       # Centralized infrastructure (at root level)
+├── memory-bank/             # Service memory bank (design decisions)
+├── .env.example             # Environment variable template
 ├── Makefile                 # Build and run targets
 └── go.mod                   # Go dependencies
 ```
@@ -241,6 +266,8 @@ To add a new sender type (e.g., Slack):
 
 ## Testing
 
+See **[Testing Guide](docs/TESTING.md)** for detailed testing information.
+
 ```bash
 # Run tests
 make test
@@ -253,25 +280,27 @@ make db-sent
 
 ## Troubleshooting
 
-### Service won't start
+For detailed troubleshooting information, see **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)**.
 
+### Quick Troubleshooting
+
+**Service won't start:**
 - Check Docker is running: `docker ps`
 - Check Postgres is ready: `docker exec sender-postgres pg_isready -U postgres`
 - Check Kafka is ready: `docker exec sender-kafka kafka-broker-api-versions --bootstrap-server localhost:9092`
 
-### No notifications being processed
-
+**No notifications being processed:**
 - Check Kafka topic exists: `docker exec sender-kafka kafka-topics --list --bootstrap-server localhost:9092`
 - Check notifications exist: `make db-query`
 - Check notifications have RECEIVED status: `make db-count`
 - Check service logs for errors
 
-### Emails not being sent
-
+**Emails not being sent:**
 - Check email endpoints exist in `endpoints` table
 - Check endpoints are enabled (`enabled = TRUE`)
 - Check endpoints have type `email`
 - Check rule_ids in notification match rule_ids with endpoints
+- See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for email-specific issues
 
 ## License
 

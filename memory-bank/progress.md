@@ -48,3 +48,10 @@
   - Services should verify dependencies, NOT manage them
   - `make run-all` automatically starts infrastructure if not running (one-command startup)
   - See `docs/architecture/INFRASTRUCTURE.md` for full documentation
+
+- **Security: Email Credentials**: Removed all hardcoded email credentials from documentation
+  - Replaced hardcoded Gmail credentials in `GMAIL_SETUP.md`, `README.md`, and `TROUBLESHOOTING.md` with placeholders
+  - Created `.env.example` template file for secure credential management
+  - Code already uses environment variables correctly (no code changes needed)
+  - All credentials must now be provided via environment variables or `.env` file
+  - `.env` files are already in `.gitignore` to prevent accidental commits
