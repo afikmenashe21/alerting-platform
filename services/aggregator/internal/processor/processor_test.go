@@ -35,6 +35,6 @@ func TestNewProcessor(t *testing.T) {
 // To achieve 100% coverage, you would need either:
 // 1. Integration tests with testcontainers or real test infrastructure
 // 2. Refactoring to use interfaces for dependency injection
-// 
+//
 // The current implementation uses concrete types which makes unit testing difficult.
 // For now, we test the constructor which is the only easily testable part.

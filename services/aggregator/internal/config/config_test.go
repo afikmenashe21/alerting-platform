@@ -50,7 +50,7 @@ func TestConfig_Validate(t *testing.T) {
 				KafkaBrokers:       "localhost:9092",
 				AlertsMatchedTopic: "alerts.matched",
 				ConsumerGroupID:    "aggregator-group",
-				PostgresDSN:         "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable",
+				PostgresDSN:        "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable",
 			},
 			wantErr: true,
 			errMsg:  "notifications-ready-topic cannot be empty",
