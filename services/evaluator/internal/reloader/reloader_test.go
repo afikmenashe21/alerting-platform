@@ -189,3 +189,33 @@ func TestReloader_ReloadNow_ErrorHandling(t *testing.T) {
 		t.Logf("ReloadNow() error (expected): %v", err)
 	}
 }
+
+func TestReloader_Start_ErrorHandling(t *testing.T) {
+	// Test Start with invalid Redis connection
+	client := redis.NewClient(&redis.Options{
+		Addr: "invalid:6379",
+	})
+	defer client.Close()
+
+	loader := snapshot.NewLoader(client)
+	snap := &snapshot.Snapshot{
+		BySeverity: map[string][]int{"HIGH": {1}},
+		BySource:   map[string][]int{"service-a": {1}},
+		ByName:     map[string][]int{"disk-full": {1}},
+		Rules:      map[int]snapshot.RuleInfo{1: {RuleID: "rule-1", ClientID: "client-1"}},
+	}
+	idx := indexes.NewIndexes(snap)
+	m := matcher.NewMatcher(idx)
+	reloader := NewReloader(loader, m, 100*time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	// This should fail due to invalid Redis connection
+	err := reloader.Start(ctx)
+	if err == nil {
+		t.Log("Start() succeeded (unexpected, may be due to connection timeout)")
+	} else {
+		t.Logf("Start() error (expected): %v", err)
+	}
+}

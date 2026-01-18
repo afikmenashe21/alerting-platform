@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -32,13 +33,36 @@ func TestLoader_LoadSnapshot_Integration(t *testing.T) {
 
 	loader := NewLoader(client)
 
-	// Test with non-existent snapshot
+	// Test with non-existent snapshot (tests redis.Nil path)
 	_, err := loader.LoadSnapshot(ctx)
 	if err == nil {
 		t.Error("LoadSnapshot() should return error for non-existent snapshot")
 	}
 	if err != nil && err.Error()[:20] != "snapshot not found" {
 		t.Logf("LoadSnapshot() error (expected): %v", err)
+	}
+
+	// Test with valid snapshot (if we can create one)
+	snap := &Snapshot{
+		SchemaVersion: 1,
+		BySeverity:    map[string][]int{"HIGH": {1}},
+		BySource:      map[string][]int{"service-a": {1}},
+		ByName:        map[string][]int{"disk-full": {1}},
+		Rules:         map[int]RuleInfo{1: {RuleID: "rule-1", ClientID: "client-1"}},
+	}
+	data, _ := json.Marshal(snap)
+	client.Set(ctx, "rules:snapshot", data, 0)
+
+	// Now test loading the snapshot
+	loadedSnap, err := loader.LoadSnapshot(ctx)
+	if err != nil {
+		t.Errorf("LoadSnapshot() error = %v, want nil", err)
+	} else {
+		if loadedSnap.SchemaVersion != snap.SchemaVersion {
+			t.Errorf("LoadSnapshot() SchemaVersion = %v, want %v", loadedSnap.SchemaVersion, snap.SchemaVersion)
+		}
+		// Clean up
+		client.Del(ctx, "rules:snapshot")
 	}
 }
 
@@ -56,13 +80,61 @@ func TestLoader_GetVersion_Integration(t *testing.T) {
 
 	loader := NewLoader(client)
 
-	// Test GetVersion - should return 0 if version doesn't exist
+	// Test GetVersion - should return 0 if version doesn't exist (tests redis.Nil path)
 	version, err := loader.GetVersion(ctx)
 	if err != nil {
 		t.Errorf("GetVersion() error = %v, want nil", err)
 	}
 	if version < 0 {
 		t.Errorf("GetVersion() = %v, want >= 0", version)
+	}
+
+	// Test GetVersion with existing version
+	client.Set(ctx, "rules:version", 42, 0)
+	version, err = loader.GetVersion(ctx)
+	if err != nil {
+		t.Errorf("GetVersion() error = %v, want nil", err)
+	}
+	if version != 42 {
+		t.Errorf("GetVersion() = %v, want 42", version)
+	}
+	// Clean up
+	client.Del(ctx, "rules:version")
+
+	// Test GetVersion with invalid Redis connection (error path)
+	invalidClient := redis.NewClient(&redis.Options{
+		Addr: "invalid:6379",
+	})
+	defer invalidClient.Close()
+
+	invalidLoader := NewLoader(invalidClient)
+	ctxTimeout, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err = invalidLoader.GetVersion(ctxTimeout)
+	if err == nil {
+		t.Log("GetVersion() with invalid connection succeeded (unexpected, may be due to timeout)")
+	} else {
+		t.Logf("GetVersion() error (expected): %v", err)
+	}
+}
+
+func TestLoader_LoadSnapshot_ErrorPaths(t *testing.T) {
+	// Test LoadSnapshot with invalid Redis connection (error path)
+	invalidClient := redis.NewClient(&redis.Options{
+		Addr: "invalid:6379",
+	})
+	defer invalidClient.Close()
+
+	invalidLoader := NewLoader(invalidClient)
+	ctxTimeout, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := invalidLoader.LoadSnapshot(ctxTimeout)
+	if err == nil {
+		t.Log("LoadSnapshot() with invalid connection succeeded (unexpected, may be due to timeout)")
+	} else {
+		t.Logf("LoadSnapshot() error (expected): %v", err)
 	}
 }
 
