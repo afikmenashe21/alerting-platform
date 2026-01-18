@@ -188,6 +188,13 @@ Run tests:
 make test
 ```
 
+For detailed testing documentation, see:
+- **[Test Coverage](./docs/TEST_COVERAGE.md)** - Coverage status and requirements
+- **[Test Organization](./docs/TEST_ORGANIZATION.md)** - Test structure and organization
+- **[Test Results](./docs/TEST_RESULTS.md)** - Latest test execution results
+
+See the [docs](./docs/) directory for all documentation.
+
 ## Development
 
 ### Create a new migration:
