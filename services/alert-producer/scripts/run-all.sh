@@ -70,42 +70,35 @@ fi
 echo_info "Dependencies downloaded ✓"
 echo ""
 
-# Step 4: Build the service
-echo_step "4/5 Building alert-producer..."
-if ! go build -o bin/alert-producer ./cmd/alert-producer 2>&1; then
-    echo_error "Failed to build alert-producer"
+# Step 4: Build the API server
+echo_step "4/5 Building alert-producer API server..."
+if ! go build -o bin/alert-producer-api ./cmd/alert-producer-api 2>&1; then
+    echo_error "Failed to build alert-producer-api"
     exit 1
 fi
 echo_info "Build successful ✓"
 echo ""
 
-# Step 5: Run the service
-echo_step "5/5 Starting alert-producer..."
+# Step 5: Run the API server
+echo_step "5/5 Starting alert-producer API server..."
 echo ""
 
 # Build command arguments with defaults
 KAFKA_BROKERS="${KAFKA_BROKERS:-localhost:9092}"
-TOPIC="${TOPIC:-alerts.new}"
-RPS="${RPS:-10}"
-DURATION="${DURATION:-60s}"
-BURST="${BURST:-0}"
+PORT="${PORT:-8082}"
 
-ARGS="${ARGS:--kafka-brokers $KAFKA_BROKERS -topic $TOPIC}"
-
-if [ "$BURST" != "0" ]; then
-    ARGS="${ARGS} -burst $BURST"
-else
-    ARGS="${ARGS} -rps $RPS -duration $DURATION"
-fi
+ARGS="${ARGS:--kafka-brokers $KAFKA_BROKERS -port $PORT}"
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}  Starting Alert Producer${NC}"
+echo -e "${GREEN}  Starting Alert Producer API Server${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo_info "Starting alert-producer with: $ARGS"
-echo_info "Publishing alerts to topic: $TOPIC"
+echo_info "Starting alert-producer API server on port $PORT"
+echo_info "Kafka brokers: $KAFKA_BROKERS"
+echo_info "API will be available at: http://localhost:$PORT"
+echo_info "Health check: curl http://localhost:$PORT/health"
 echo ""
 echo -e "${YELLOW}Press Ctrl+C to stop the service${NC}"
 echo ""
 
-exec ./bin/alert-producer $ARGS
+exec ./bin/alert-producer-api $ARGS

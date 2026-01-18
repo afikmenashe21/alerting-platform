@@ -16,6 +16,7 @@ In progress / Next:
 4) ✅ sender: consume notifications.ready + send via email (SMTP), Slack (webhook API), and webhook (HTTP POST) + update status
 5) ✅ rule-service-ui: React UI for managing clients, rules, and endpoints
 6) ✅ Centralized infrastructure management (Postgres, Kafka, Redis, Zookeeper)
+7) 🔄 UI Integration for alert-producer: Add HTTP API wrapper and UI component for generating alerts with optional manual config
 
 ## Decisions locked for MVP
 - Rules support exact match and wildcard "*" on (severity, source, name).

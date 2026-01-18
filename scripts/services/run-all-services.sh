@@ -37,13 +37,13 @@ echo_step() {
 }
 
 # Services to run (in dependency order)
-# Note: alert-producer is excluded - run it separately with 'make run-producer'
 SERVICES=(
     "rule-service"
     "rule-updater"
     "evaluator"
     "aggregator"
     "sender"
+    "alert-producer"
 )
 
 # Check if we should run in background or foreground

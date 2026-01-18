@@ -8,6 +8,7 @@ This directory contains all documentation for the alert-producer service.
 - **[Getting Started Guide](./SETUP_AND_RUN.md)** - Complete setup and run instructions (recommended)
 
 ### Technical Documentation
+- **[HTTP API Server](./API_SERVER.md)** - REST API for UI integration and job management
 - **[Architecture & Structure](./STRUCTURE.md)** - Code organization, directory structure, and design decisions
 - **[Event Structure](./EVENT_STRUCTURE.md)** - Complete alert event JSON schema and field specifications
 - **[Partitioning Strategy](./PARTITIONING.md)** - How we use key-based partitioning to avoid hot partitions

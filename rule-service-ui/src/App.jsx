@@ -3,6 +3,7 @@ import Clients from './components/Clients';
 import Rules from './components/Rules';
 import Endpoints from './components/Endpoints';
 import Notifications from './components/Notifications';
+import AlertGenerator from './components/AlertGenerator';
 import './index.css';
 
 function App() {
@@ -37,6 +38,12 @@ function App() {
           >
             Notifications
           </button>
+          <button
+            className={activeTab === 'alerts' ? 'active' : ''}
+            onClick={() => setActiveTab('alerts')}
+          >
+            Alert Generator
+          </button>
         </div>
       </div>
 
@@ -44,6 +51,7 @@ function App() {
       {activeTab === 'rules' && <Rules />}
       {activeTab === 'endpoints' && <Endpoints />}
       {activeTab === 'notifications' && <Notifications />}
+      {activeTab === 'alerts' && <AlertGenerator />}
     </div>
   );
 }

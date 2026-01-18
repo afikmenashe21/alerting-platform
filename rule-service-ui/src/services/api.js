@@ -212,3 +212,56 @@ export const notificationsAPI = {
     return handleResponse(response);
   },
 };
+
+// ============================================================================
+// Alert Generator API (alert-producer)
+// ============================================================================
+
+// Use proxy in development (via Vite), direct URL in production
+// The proxy is configured in vite.config.js to route /alert-producer-api/* to http://localhost:8082/*
+const ALERT_PRODUCER_API_BASE = '/alert-producer-api/api/v1/alerts';
+
+export const alertGeneratorAPI = {
+  async generate(config) {
+    const url = `${ALERT_PRODUCER_API_BASE}/generate`;
+    console.log('POST', url, config);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    
+    console.log('Response status:', response.status);
+    return handleResponse(response);
+  },
+
+  async getStatus(jobId) {
+    const url = `${ALERT_PRODUCER_API_BASE}/generate/status?job_id=${jobId}`;
+    console.log('GET', url);
+    const response = await fetch(url);
+    console.log('Response status:', response.status);
+    return handleResponse(response);
+  },
+
+  async list(statusFilter = null) {
+    let url = `${ALERT_PRODUCER_API_BASE}/generate/list`;
+    if (statusFilter) {
+      url += `?status=${statusFilter}`;
+    }
+    console.log('GET', url);
+    const response = await fetch(url);
+    console.log('Response status:', response.status);
+    return handleResponse(response);
+  },
+
+  async stop(jobId) {
+    const url = `${ALERT_PRODUCER_API_BASE}/generate/stop?job_id=${jobId}`;
+    console.log('POST', url);
+    const response = await fetch(url, {
+      method: 'POST',
+    });
+    console.log('Response status:', response.status);
+    return handleResponse(response);
+  },
+};

@@ -55,3 +55,11 @@
   - Code already uses environment variables correctly (no code changes needed)
   - All credentials must now be provided via environment variables or `.env` file
   - `.env` files are already in `.gitignore` to prevent accidental commits
+
+- **UI Integration for alert-producer (Planned)**: Integration with rule-service-ui for alert generation
+  - HTTP API wrapper around alert-producer functionality
+  - New UI component in rule-service-ui for generating alerts
+  - Support for all CLI configuration options via web interface
+  - Real-time status monitoring and job tracking
+  - Preset configurations and manual configuration options
+  - See `services/alert-producer/memory-bank/` for detailed design

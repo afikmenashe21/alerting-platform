@@ -1,14 +1,19 @@
-.PHONY: build run run-test test clean help
+.PHONY: build run run-cli run-test test clean help build-api run-api
 
 BINARY_NAME=alert-producer
 CMD_PATH=./cmd/alert-producer
+API_BINARY_NAME=alert-producer-api
+API_CMD_PATH=./cmd/alert-producer-api
 
 help:
 	@echo "Available targets:"
 	@echo "  setup-run    - Complete setup and run (recommended)"
-	@echo "  build        - Build the binary"
-	@echo "  run          - Run the service (default: 10 RPS for 60s)"
-	@echo "  run-test     - Run in test mode (generates LOW/test-source/test-name alerts)"
+	@echo "  build        - Build the CLI binary"
+	@echo "  build-api    - Build the HTTP API server binary"
+	@echo "  run          - Run the HTTP API server (port 8082) - for UI integration"
+	@echo "  run-cli      - Run the CLI service (default: 10 RPS for 60s)"
+	@echo "  run-api      - Run the HTTP API server (port 8082) - alias for 'run'"
+	@echo "  run-test     - Run CLI in test mode (generates LOW/test-source/test-name alerts)"
 	@echo "  run-single-test - Send a single test alert (LOW/test-source/test-name) and exit"
 	@echo "  test         - Run tests"
 	@echo "  clean        - Remove build artifacts"
@@ -18,16 +23,29 @@ build:
 	@echo "Building $(BINARY_NAME)..."
 	go build -o bin/$(BINARY_NAME) $(CMD_PATH)
 
-run: build
-	@echo "Running $(BINARY_NAME)..."
+build-api:
+	@echo "Building $(API_BINARY_NAME)..."
+	go build -o bin/$(API_BINARY_NAME) $(API_CMD_PATH)
+
+run: build-api
+	@echo "Running $(API_BINARY_NAME) on port 8082..."
+	@echo "API server will be available at http://localhost:8082"
+	@echo "Health check: curl http://localhost:8082/health"
+	./bin/$(API_BINARY_NAME) $(ARGS)
+
+run-api: run
+	@echo "Note: 'run-api' is an alias for 'run'"
+
+run-cli: build
+	@echo "Running $(BINARY_NAME) CLI..."
 	./bin/$(BINARY_NAME) $(ARGS)
 
 run-test: build
-	@echo "Running $(BINARY_NAME) in test mode (LOW/test-source/test-name)..."
+	@echo "Running $(BINARY_NAME) CLI in test mode (LOW/test-source/test-name)..."
 	./bin/$(BINARY_NAME) -test $(ARGS)
 
 run-single-test: build
-	@echo "Running $(BINARY_NAME) in single test mode (sending one alert: LOW/test-source/test-name)..."
+	@echo "Running $(BINARY_NAME) CLI in single test mode (sending one alert: LOW/test-source/test-name)..."
 	./bin/$(BINARY_NAME) -single-test $(ARGS)
 
 test:
@@ -37,21 +55,22 @@ test:
 clean:
 	@echo "Cleaning..."
 	rm -rf bin/
+	rm -f $(BINARY_NAME) $(API_BINARY_NAME)
 
 deps:
 	@echo "Downloading dependencies..."
 	go mod download
 	go mod tidy
 
-# Example usage targets
+# Example usage targets (for CLI)
 run-burst:
-	$(MAKE) run ARGS="-burst 100 -kafka-brokers localhost:9092"
+	$(MAKE) run-cli ARGS="-burst 100 -kafka-brokers localhost:9092"
 
 run-continuous:
-	$(MAKE) run ARGS="-rps 50 -duration 5m -kafka-brokers localhost:9092"
+	$(MAKE) run-cli ARGS="-rps 50 -duration 5m -kafka-brokers localhost:9092"
 
 run-deterministic:
-	$(MAKE) run ARGS="-rps 10 -duration 30s -seed 42 -kafka-brokers localhost:9092"
+	$(MAKE) run-cli ARGS="-rps 10 -duration 30s -seed 42 -kafka-brokers localhost:9092"
 
 # Test mode examples
 run-test-burst:

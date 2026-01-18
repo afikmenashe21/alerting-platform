@@ -133,6 +133,49 @@ func createTopicIfNotExists(broker, topic string) {
 		"partitions", 3,
 		"replication_factor", 1,
 	)
+
+	// Wait for topic to be fully available (Kafka topic creation is asynchronous)
+	// Retry reading partitions up to 5 times with 1 second delay
+	maxRetries := 5
+	retryDelay := 1 * time.Second
+	for i := 0; i < maxRetries; i++ {
+		time.Sleep(retryDelay)
+		partitions, err := conn.ReadPartitions(topic)
+		if err == nil && len(partitions) > 0 {
+			slog.Info("Topic is now available",
+				"topic", topic,
+				"partitions", len(partitions),
+			)
+			return
+		}
+		if i < maxRetries-1 {
+			slog.Info("Waiting for topic to be available",
+				"topic", topic,
+				"attempt", i+1,
+				"max_retries", maxRetries,
+			)
+		}
+	}
+
+	// If we still can't read partitions, try one more time with a fresh connection
+	// This handles the case where the connection was stale
+	verifyConn, err := kafka.Dial("tcp", broker)
+	if err == nil {
+		defer verifyConn.Close()
+		partitions, err := verifyConn.ReadPartitions(topic)
+		if err == nil && len(partitions) > 0 {
+			slog.Info("Topic is now available (verified with new connection)",
+				"topic", topic,
+				"partitions", len(partitions),
+			)
+			return
+		}
+	}
+
+	slog.Warn("Topic created but may not be fully available yet",
+		"topic", topic,
+		"note", "Producer will retry on first write if topic is not ready",
+	)
 }
 
 // Publish serializes an alert to JSON and publishes it to Kafka.
@@ -172,16 +215,40 @@ func (p *Producer) Publish(ctx context.Context, alert *generator.Alert) error {
 	}
 	
 	// Write to Kafka (synchronous, waits for ack)
-	if err := p.writer.WriteMessages(ctx, msg); err != nil {
+	// Retry once if topic is not ready (handles async topic creation)
+	maxRetries := 2
+	var writeErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		writeErr = p.writer.WriteMessages(ctx, msg)
+		if writeErr == nil {
+			return nil
+		}
+
+		// Check if error is due to topic not existing
+		errStr := writeErr.Error()
+		if (strings.Contains(errStr, "Unknown Topic Or Partition") || 
+			strings.Contains(errStr, "does not exist")) && attempt < maxRetries {
+			slog.Info("Topic not ready, retrying after delay",
+				"alert_id", alert.AlertID,
+				"topic", p.topic,
+				"attempt", attempt,
+				"max_retries", maxRetries,
+			)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// For other errors or final attempt, return error
 		slog.Error("Failed to write message to Kafka",
 			"alert_id", alert.AlertID,
 			"topic", p.topic,
-			"error", err,
+			"error", writeErr,
+			"attempt", attempt,
 		)
-		return fmt.Errorf("failed to write message to Kafka: %w", err)
+		return fmt.Errorf("failed to write message to Kafka: %w", writeErr)
 	}
-	
-	return nil
+
+	return fmt.Errorf("failed to write message to Kafka after %d attempts: %w", maxRetries, writeErr)
 }
 
 // hashAlertID creates a deterministic hash of the alert_id for partition key.

@@ -5,6 +5,7 @@ Generates synthetic alerts and publishes them to Kafka `alerts.new` topic for te
 ## 📚 Documentation
 
 - **[Getting Started](docs/SETUP_AND_RUN.md)** - Complete setup and run guide
+- **[HTTP API Server](docs/API_SERVER.md)** - REST API for UI integration
 - **[Architecture](docs/STRUCTURE.md)** - Code organization and design decisions
 - **[Event Structure](docs/EVENT_STRUCTURE.md)** - Alert event JSON schema
 - **[Partitioning Strategy](docs/PARTITIONING.md)** - How we avoid hot partitions
@@ -13,12 +14,15 @@ See [docs/README.md](docs/README.md) for complete documentation index.
 
 ## Features
 
+- **CLI Interface**: Command-line tool for generating alerts
+- **HTTP API Server**: REST API for web UI integration (see [API_SERVER.md](docs/API_SERVER.md))
 - **Configurable rate**: Set alerts per second (RPS)
 - **Burst mode**: Send N alerts immediately for stress testing
 - **Distributions**: Configure severity/source/name distributions
 - **Rule matching**: Default distributions match test-data generator values to ensure alerts match existing rules
 - **Deterministic mode**: Use seed for reproducible test data
 - **Graceful shutdown**: Handles SIGINT/SIGTERM
+- **Job tracking**: API server tracks job status and history
 
 ## Usage
 
