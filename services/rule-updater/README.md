@@ -22,6 +22,7 @@ rule-service (CRUD) → Kafka (rule.changed) → rule-updater → Redis (snapsho
 ## Documentation
 
 - **[Architecture](docs/ARCHITECTURE.md)** - Service architecture and design patterns
+- **[Test Coverage](docs/TEST_COVERAGE.md)** - Test coverage documentation and running tests
 
 ## Quick Start
 
@@ -148,6 +149,27 @@ The snapshot stored in Redis is a JSON object with the following structure:
 - `make run-all` - Complete setup and run (recommended)
 
 ## Testing
+
+### Running Tests
+
+See **[Test Coverage Documentation](docs/TEST_COVERAGE.md)** for detailed information about test coverage and running tests.
+
+Quick start:
+```bash
+# Install test dependencies
+go get github.com/DATA-DOG/go-sqlmock
+go mod tidy
+
+# Run all tests
+go test ./... -v
+
+# Run with coverage
+go test ./... -cover
+
+# Generate coverage report
+go test ./... -coverprofile=coverage.out
+go tool cover -html=coverage.out -o coverage.html
+```
 
 ### Manual Testing
 
