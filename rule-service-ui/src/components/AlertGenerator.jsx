@@ -92,6 +92,18 @@ function AlertGenerator() {
     }
   };
 
+  // Helper function to extract user-friendly error message
+  const getErrorMessage = (err) => {
+    if (!err || !err.message) {
+      return 'An unexpected error occurred';
+    }
+    const msg = err.message;
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ERR_CONNECTION_REFUSED')) {
+      return 'Cannot connect to alert-producer API. Make sure the API server is running:\n\ncd services/alert-producer && make run-api';
+    }
+    return msg;
+  };
+
   const loadJobHistory = async () => {
     try {
       const jobs = await alertGeneratorAPI.list();
@@ -178,15 +190,7 @@ function AlertGenerator() {
       loadJobHistory();
     } catch (err) {
       console.error('Error starting alert generation:', err);
-      let errorMessage = 'Failed to start alert generation';
-      if (err.message) {
-        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('ERR_CONNECTION_REFUSED')) {
-          errorMessage = 'Cannot connect to alert-producer API. Make sure the API server is running:\n\ncd services/alert-producer && make run-api';
-        } else {
-          errorMessage = err.message;
-        }
-      }
-      setError(errorMessage);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -271,16 +275,7 @@ function AlertGenerator() {
       loadJobHistory();
     } catch (err) {
       console.error('Error starting alert generation:', err);
-      let errorMessage = 'Failed to start alert generation';
-      if (err.message) {
-        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('ERR_CONNECTION_REFUSED')) {
-          errorMessage = 'Cannot connect to alert-producer API. Make sure the API server is running:\n\ncd services/alert-producer && make run-api';
-        } else {
-          // Error message should already be parsed by handleResponse
-          errorMessage = err.message;
-        }
-      }
-      setError(errorMessage);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -301,15 +296,7 @@ function AlertGenerator() {
       }
     } catch (err) {
       console.error('Error stopping job:', err);
-      let errorMessage = 'Failed to stop job';
-      if (err.message) {
-        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('ERR_CONNECTION_REFUSED')) {
-          errorMessage = 'Cannot connect to alert-producer API. Make sure the API server is running.';
-        } else {
-          errorMessage = err.message;
-        }
-      }
-      setError(errorMessage);
+      setError(getErrorMessage(err));
     }
   };
 

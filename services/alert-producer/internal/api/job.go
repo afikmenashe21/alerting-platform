@@ -4,7 +4,6 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -292,37 +291,7 @@ func (jm *JobManager) RunJob(job *Job, kafkaBrokers string) {
 
 // validateConfigForJob validates configuration for job execution.
 // Skips distribution and RPS/duration validation when singleTest is true.
+// This is a wrapper around validateConfig for consistency.
 func validateConfigForJob(cfg *config.Config, singleTest bool) error {
-	if cfg.KafkaBrokers == "" {
-		return fmt.Errorf("kafka-brokers cannot be empty")
-	}
-	if cfg.Topic == "" {
-		return fmt.Errorf("topic cannot be empty")
-	}
-
-	// For single_test mode, RPS/duration/burst are not needed (just sends one alert)
-	if !singleTest {
-		if cfg.RPS <= 0 && cfg.BurstSize <= 0 {
-			return fmt.Errorf("rps must be > 0 or burst must be > 0")
-		}
-		if cfg.BurstSize == 0 && cfg.Duration <= 0 {
-			return fmt.Errorf("duration must be > 0 when not in burst mode")
-		}
-	}
-
-	// Skip distribution validation for single_test mode (not needed)
-	if !singleTest {
-		// Validate distribution strings
-		if _, err := config.ParseDistribution(cfg.SeverityDist); err != nil {
-			return fmt.Errorf("invalid severity-dist: %w", err)
-		}
-		if _, err := config.ParseDistribution(cfg.SourceDist); err != nil {
-			return fmt.Errorf("invalid source-dist: %w", err)
-		}
-		if _, err := config.ParseDistribution(cfg.NameDist); err != nil {
-			return fmt.Errorf("invalid name-dist: %w", err)
-		}
-	}
-
-	return nil
+	return validateConfig(cfg, singleTest)
 }

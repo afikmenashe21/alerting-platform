@@ -427,7 +427,7 @@ func TestProcessor_runTestBurstMode_ProgressLogging(t *testing.T) {
 	proc := NewProcessor(gen, pub, cfg)
 
 	ctx := context.Background()
-	err := proc.runTestBurstMode(ctx, 150)
+	err := proc.runTestBurstMode(ctx, 150, nil)
 	if err != nil {
 		t.Fatalf("runTestBurstMode should not error, got: %v", err)
 	}
@@ -455,7 +455,7 @@ func TestProcessor_runTestContinuousMode_TestAlertSent(t *testing.T) {
 
 	ctx := context.Background()
 	// Use higher RPS to ensure alerts are published
-	err := proc.runTestContinuousMode(ctx, 100.0, 200*time.Millisecond)
+	err := proc.runTestContinuousMode(ctx, 100.0, 200*time.Millisecond, nil)
 	if err != nil {
 		t.Fatalf("runTestContinuousMode should not error, got: %v", err)
 	}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"time"
 
 	"alert-producer/internal/config"
@@ -322,20 +321,3 @@ func validateConfig(cfg *config.Config, skipDistributions bool) error {
 	return nil
 }
 
-// parseInt parses an integer from a string, returning 0 if empty or invalid.
-func parseInt(s string) int {
-	if s == "" {
-		return 0
-	}
-	val, _ := strconv.Atoi(s)
-	return val
-}
-
-// parseFloat64 parses a float64 from a string, returning 0 if empty or invalid.
-func parseFloat64(s string) float64 {
-	if s == "" {
-		return 0
-	}
-	val, _ := strconv.ParseFloat(s, 64)
-	return val
-}
