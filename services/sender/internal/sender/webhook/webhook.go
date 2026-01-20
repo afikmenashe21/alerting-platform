@@ -8,17 +8,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"sender/internal/database"
 	"sender/internal/sender/payload"
+	"sender/internal/sender/validation"
 )
-
-// isValidURL checks if a string is a valid HTTP/HTTPS URL.
-func isValidURL(s string) bool {
-	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
-}
 
 // Sender implements webhook notification sending via HTTP POST.
 type Sender struct {
@@ -47,7 +42,7 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 	}
 
 	// Validate that it's a URL (starts with http:// or https://)
-	if !isValidURL(endpointValue) {
+	if !validation.IsValidURL(endpointValue) {
 		return fmt.Errorf("invalid webhook URL: %q (must be a valid HTTP/HTTPS URL)", endpointValue)
 	}
 

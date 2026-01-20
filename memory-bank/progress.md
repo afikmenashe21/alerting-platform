@@ -34,6 +34,13 @@
     - `removeFromIndex()`: Unified index removal logic
     - `newEmptySnapshot()`: Centralized empty snapshot creation
   - All tests pass; behavior unchanged.
+- [x] sender: code cleanup and modularization:
+  - Extracted duplicate `isValidURL` function from `slack.go` and `webhook.go` to shared `validation` package
+  - Split 307-line `email.go` into three focused files:
+    - `email.go` (164 lines): Main sender struct, configuration, and Send method
+    - `smtp.go` (118 lines): TLS connection handling
+    - `message.go` (40 lines): Email message building
+  - All sender tests pass; behavior unchanged.
 
 ## Recent Decisions
 - **Evaluator output format**: One message per client_id (not one message with all matches)

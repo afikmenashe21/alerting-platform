@@ -27,9 +27,13 @@ internal/sender/
 ├── sender.go          # Coordinator
 ├── strategy/          # Interface and registry
 ├── email/             # Email sender module
+│   ├── email.go       # Main sender struct, configuration, Send method
+│   ├── smtp.go        # TLS connection handling
+│   └── message.go     # Email message building
 ├── slack/             # Slack sender module
 ├── webhook/           # Webhook sender module
-└── payload/           # Payload builders
+├── payload/           # Payload builders
+└── validation/        # Shared validation utilities
 ```
 
 ### Multi-Channel Sender Design
@@ -74,6 +78,21 @@ internal/sender/
 - Log errors with context (notification_id, rule_ids, endpoint types, etc.)
 - Continue processing other messages on error
 - Partial send failures are logged but don't fail the operation if at least one channel succeeds
+
+## Code Cleanup and Modularization
+
+### Shared Validation Helper
+- **Extracted `isValidURL` function** from `slack.go` and `webhook.go` to shared `validation` package
+- Created `internal/sender/validation/validation.go` for reusable validation utilities
+- Removed code duplication between Slack and webhook senders
+
+### Email Package Modularization
+- **Split `email.go` (307 lines)** into three focused files:
+  - `email.go` (164 lines): Main sender struct, configuration, and Send method
+  - `smtp.go` (118 lines): TLS connection handling (sendWithTLS method)
+  - `message.go` (40 lines): Email message building (buildEmailMessage, parseRecipients)
+- All files now under 300 lines, organized by concern
+- Maintained all existing functionality and test coverage
 
 ## Future Enhancements
 - Retry logic with exponential backoff for failed sends

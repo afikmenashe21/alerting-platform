@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sender/internal/database"
+	"sender/internal/sender/validation"
 )
 
 func TestNewSender(t *testing.T) {
@@ -73,9 +74,9 @@ func TestIsValidURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isValidURL(tt.url)
+			got := validation.IsValidURL(tt.url)
 			if got != tt.want {
-				t.Errorf("isValidURL(%q) = %v, want %v", tt.url, got, tt.want)
+				t.Errorf("IsValidURL(%q) = %v, want %v", tt.url, got, tt.want)
 			}
 		})
 	}

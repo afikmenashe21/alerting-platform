@@ -8,17 +8,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"sender/internal/database"
 	"sender/internal/sender/payload"
+	"sender/internal/sender/validation"
 )
-
-// isValidURL checks if a string is a valid HTTP/HTTPS URL.
-func isValidURL(s string) bool {
-	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
-}
 
 // maskURL masks sensitive parts of a URL for logging.
 func maskURL(url string) string {
@@ -56,7 +51,7 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 	}
 
 	// Validate that it's a URL (starts with http:// or https://)
-	if !isValidURL(endpointValue) {
+	if !validation.IsValidURL(endpointValue) {
 		return fmt.Errorf("invalid Slack webhook URL: %q (must be a valid HTTP/HTTPS URL, not a channel name). Slack webhook URLs typically start with https://hooks.slack.com/services/", endpointValue)
 	}
 

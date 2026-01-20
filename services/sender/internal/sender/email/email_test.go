@@ -193,14 +193,12 @@ func TestParseRecipients(t *testing.T) {
 }
 
 func TestBuildEmailMessage(t *testing.T) {
-	sender := NewSender()
-
 	from := "from@example.com"
 	to := []string{"to1@example.com", "to2@example.com"}
 	subject := "Test Subject"
 	body := "Test Body"
 
-	msg := sender.buildEmailMessage(from, to, subject, body)
+	msg := buildEmailMessage(from, to, subject, body)
 
 	if len(msg) == 0 {
 		t.Error("buildEmailMessage() should return non-empty message")
