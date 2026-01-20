@@ -15,7 +15,7 @@
 - [x] Deduplicated redundant code into private helpers:
   - Validation helpers: `isValidSeverity()`, `isAllWildcards()`, `isValidEndpointType()` in `validation.go`
   - HTTP helpers: `requireMethod()`, `decodeJSON()`, `writeJSON()`, `requireQueryParam()` in `validation.go`
-  - Database helper: `unmarshalNotificationContext()` in `database.go`
+  - Database helper: `unmarshalNotificationContext()` in `db.go`
   - Reduced ~30+ lines of duplicated code across handlers
   - All tests pass; behavior unchanged.
 - [x] Modularized handlers package by resource type:
@@ -25,6 +25,27 @@
     - `endpoints.go` - endpoint CRUD handlers
     - `notifications.go` - notification read handlers
   - Improved maintainability and separation of concerns
+  - All tests pass; behavior unchanged.
+- [x] Modularized database package by resource type:
+  - Split 716-line `database.go` into focused files:
+    - `types.go` - All data structures (Client, Rule, Endpoint, Notification)
+    - `db.go` - DB struct, connection management, and shared helpers
+    - `clients.go` - Client CRUD operations
+    - `rules.go` - Rule CRUD operations
+    - `endpoints.go` - Endpoint CRUD operations
+    - `notifications.go` - Notification read operations
+  - All tests pass; behavior unchanged.
+- [x] Modularized router package:
+  - Split 180-line `router.go` into focused files:
+    - `router.go` - Router struct and core methods
+    - `routes.go` - Route configuration (setupRoutes)
+    - `middleware.go` - CORS middleware
+    - `server.go` - HTTP server creation
+  - All tests pass; behavior unchanged.
+- [x] Modularized producer package:
+  - Split 194-line `producer.go` into focused files:
+    - `producer.go` - Producer struct and main operations
+    - `topic.go` - Topic creation logic
   - All tests pass; behavior unchanged.
 
 ## Architecture Decisions

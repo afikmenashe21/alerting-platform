@@ -18,10 +18,16 @@
 - [x] rule-service-ui: React UI for CRUD operations on clients, rules, and endpoints
 
 ## Code health
-- [x] rule-service: code cleanup and modularization:
+- [x] rule-service: comprehensive code cleanup and modularization:
   - Removed redundant code via private helpers (validation, HTTP, JSON parsing)
   - Modularized handlers: split 674-line `handlers.go` into resource-specific files:
     - `clients.go`, `rules.go`, `endpoints.go`, `notifications.go`
+  - Modularized database: split 716-line `database.go` into resource-specific files:
+    - `types.go`, `db.go`, `clients.go`, `rules.go`, `endpoints.go`, `notifications.go`
+  - Modularized router: split 180-line `router.go` into:
+    - `router.go`, `routes.go`, `middleware.go`, `server.go`
+  - Modularized producer: split 194-line `producer.go` into:
+    - `producer.go`, `topic.go`
   - Added `publishRuleChangedEvent()` helper to reduce duplication
   - All rule-service tests pass; behavior unchanged.
 - [x] rule-updater: code cleanup and modularization:
