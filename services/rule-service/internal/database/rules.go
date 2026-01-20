@@ -18,18 +18,8 @@ func (db *DB) CreateRule(ctx context.Context, clientID, severity, source, name s
 		VALUES ($1, $2, $3, $4, TRUE, 1, NOW(), NOW())
 		RETURNING rule_id, client_id, severity, source, name, enabled, version, created_at, updated_at
 	`
-	var rule Rule
-	err := db.conn.QueryRowContext(ctx, query, clientID, severity, source, name).Scan(
-		&rule.RuleID,
-		&rule.ClientID,
-		&rule.Severity,
-		&rule.Source,
-		&rule.Name,
-		&rule.Enabled,
-		&rule.Version,
-		&rule.CreatedAt,
-		&rule.UpdatedAt,
-	)
+	row := db.conn.QueryRowContext(ctx, query, clientID, severity, source, name)
+	rule, err := scanRule(row)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
 			if pqErr.Code == "23505" { // unique_violation
@@ -47,7 +37,7 @@ func (db *DB) CreateRule(ctx context.Context, clientID, severity, source, name s
 		}
 		return nil, fmt.Errorf("failed to create rule: %w", err)
 	}
-	return &rule, nil
+	return rule, nil
 }
 
 // GetRule retrieves a rule by ID.
@@ -57,25 +47,15 @@ func (db *DB) GetRule(ctx context.Context, ruleID string) (*Rule, error) {
 		FROM rules
 		WHERE rule_id = $1
 	`
-	var rule Rule
-	err := db.conn.QueryRowContext(ctx, query, ruleID).Scan(
-		&rule.RuleID,
-		&rule.ClientID,
-		&rule.Severity,
-		&rule.Source,
-		&rule.Name,
-		&rule.Enabled,
-		&rule.Version,
-		&rule.CreatedAt,
-		&rule.UpdatedAt,
-	)
+	row := db.conn.QueryRowContext(ctx, query, ruleID)
+	rule, err := scanRule(row)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("rule not found: %s", ruleID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rule: %w", err)
 	}
-	return &rule, nil
+	return rule, nil
 }
 
 // ListRules retrieves all rules, optionally filtered by client_id.
@@ -108,21 +88,11 @@ func (db *DB) ListRules(ctx context.Context, clientID *string) ([]*Rule, error) 
 
 	var rules []*Rule
 	for rows.Next() {
-		var rule Rule
-		if err := rows.Scan(
-			&rule.RuleID,
-			&rule.ClientID,
-			&rule.Severity,
-			&rule.Source,
-			&rule.Name,
-			&rule.Enabled,
-			&rule.Version,
-			&rule.CreatedAt,
-			&rule.UpdatedAt,
-		); err != nil {
+		rule, err := scanRule(rows)
+		if err != nil {
 			return nil, fmt.Errorf("failed to scan rule: %w", err)
 		}
-		rules = append(rules, &rule)
+		rules = append(rules, rule)
 	}
 	return rules, rows.Err()
 }
@@ -140,31 +110,19 @@ func (db *DB) UpdateRule(ctx context.Context, ruleID string, severity, source, n
 		WHERE rule_id = $1 AND version = $5
 		RETURNING rule_id, client_id, severity, source, name, enabled, version, created_at, updated_at
 	`
-	var rule Rule
-	err := db.conn.QueryRowContext(ctx, query, ruleID, severity, source, name, expectedVersion).Scan(
-		&rule.RuleID,
-		&rule.ClientID,
-		&rule.Severity,
-		&rule.Source,
-		&rule.Name,
-		&rule.Enabled,
-		&rule.Version,
-		&rule.CreatedAt,
-		&rule.UpdatedAt,
-	)
+	row := db.conn.QueryRowContext(ctx, query, ruleID, severity, source, name, expectedVersion)
+	rule, err := scanRule(row)
 	if err == sql.ErrNoRows {
 		// Check if rule exists but version mismatch
-		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM rules WHERE rule_id = $1)`
-		if err := db.conn.QueryRowContext(ctx, checkQuery, ruleID).Scan(&exists); err == nil && exists {
-			return nil, fmt.Errorf("rule version mismatch: expected version %d", expectedVersion)
+		if versionErr := db.checkRuleVersionMismatch(ctx, ruleID, expectedVersion); versionErr != nil {
+			return nil, versionErr
 		}
 		return nil, fmt.Errorf("rule not found: %s", ruleID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to update rule: %w", err)
 	}
-	return &rule, nil
+	return rule, nil
 }
 
 // ToggleRuleEnabled toggles the enabled status of a rule with optimistic locking.
@@ -177,30 +135,18 @@ func (db *DB) ToggleRuleEnabled(ctx context.Context, ruleID string, enabled bool
 		WHERE rule_id = $1 AND version = $3
 		RETURNING rule_id, client_id, severity, source, name, enabled, version, created_at, updated_at
 	`
-	var rule Rule
-	err := db.conn.QueryRowContext(ctx, query, ruleID, enabled, expectedVersion).Scan(
-		&rule.RuleID,
-		&rule.ClientID,
-		&rule.Severity,
-		&rule.Source,
-		&rule.Name,
-		&rule.Enabled,
-		&rule.Version,
-		&rule.CreatedAt,
-		&rule.UpdatedAt,
-	)
+	row := db.conn.QueryRowContext(ctx, query, ruleID, enabled, expectedVersion)
+	rule, err := scanRule(row)
 	if err == sql.ErrNoRows {
-		var exists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM rules WHERE rule_id = $1)`
-		if err := db.conn.QueryRowContext(ctx, checkQuery, ruleID).Scan(&exists); err == nil && exists {
-			return nil, fmt.Errorf("rule version mismatch: expected version %d", expectedVersion)
+		if versionErr := db.checkRuleVersionMismatch(ctx, ruleID, expectedVersion); versionErr != nil {
+			return nil, versionErr
 		}
 		return nil, fmt.Errorf("rule not found: %s", ruleID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to toggle rule enabled: %w", err)
 	}
-	return &rule, nil
+	return rule, nil
 }
 
 // DeleteRule deletes a rule by ID.
@@ -236,21 +182,11 @@ func (db *DB) GetRulesUpdatedSince(ctx context.Context, since time.Time) ([]*Rul
 
 	var rules []*Rule
 	for rows.Next() {
-		var rule Rule
-		if err := rows.Scan(
-			&rule.RuleID,
-			&rule.ClientID,
-			&rule.Severity,
-			&rule.Source,
-			&rule.Name,
-			&rule.Enabled,
-			&rule.Version,
-			&rule.CreatedAt,
-			&rule.UpdatedAt,
-		); err != nil {
+		rule, err := scanRule(rows)
+		if err != nil {
 			return nil, fmt.Errorf("failed to scan rule: %w", err)
 		}
-		rules = append(rules, &rule)
+		rules = append(rules, rule)
 	}
 	return rules, rows.Err()
 }

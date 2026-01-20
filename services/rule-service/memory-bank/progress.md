@@ -54,6 +54,10 @@
     - Removed ~50+ lines of duplicate error handling code across clients, rules, and endpoints handlers
   - Split large files by concern:
     - `rules.go` (304 lines) → split into rules.go (handlers) and rules_events.go (event publishing helpers)
+  - Extracted redundant database scanning patterns:
+    - `internal/database/db.go`: Added `scanRule()` helper to scan rules from sql.Row or sql.Rows (reduces duplication across GetRule, ListRules, GetRulesUpdatedSince, UpdateRule, ToggleRuleEnabled, CreateRule)
+    - `internal/database/db.go`: Added `checkRuleVersionMismatch()` helper for version mismatch checking (reduces duplication in UpdateRule and ToggleRuleEnabled)
+    - Reduced code duplication by ~40 lines in database operations
   - All tests pass; behavior unchanged.
 
 ## Architecture Decisions

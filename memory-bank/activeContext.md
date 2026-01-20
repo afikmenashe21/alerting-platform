@@ -19,7 +19,11 @@ In progress / Next:
 7) 🔄 UI Integration for alert-producer: Add HTTP API wrapper and UI component for generating alerts with optional manual config
 
 ## Code health
-- Started safe cleanup passes that remove redundancy without changing behavior (e.g., shared validation helpers, shared JSON parsing helpers), keeping tests green.
+- Completed comprehensive cleanup and modularization across all services:
+  - Extracted redundant code patterns (validation, error handling, database scanning)
+  - Split large files (>200 lines) by resource/concern where appropriate
+  - All services maintain existing functionality with improved organization
+  - Remaining files slightly over 200 lines are well-organized handler files without obvious redundancy
 
 ## Decisions locked for MVP
 - Rules support exact match and wildcard "*" on (severity, source, name).

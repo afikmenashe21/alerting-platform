@@ -96,6 +96,12 @@
     - `internal/snapshot/snapshot.go` (267 lines) → split into snapshot.go (types and helpers), builder.go (BuildSnapshot), and operations.go (AddRule, UpdateRule, RemoveRule)
     - Extracted helper functions: `addToIndex()`, `addToDictionaries()`, `addToIndexes()` to reduce duplication
   - All rule-updater tests pass; behavior unchanged.
+- [x] rule-service: additional database code cleanup:
+  - Extracted redundant scanning patterns from `internal/database/rules.go`:
+    - `scanRule()`: Helper function to scan a rule from sql.Row or sql.Rows (used by GetRule, ListRules, GetRulesUpdatedSince, UpdateRule, ToggleRuleEnabled, CreateRule)
+    - `checkRuleVersionMismatch()`: Helper function for version mismatch checking (used by UpdateRule and ToggleRuleEnabled)
+  - Reduced code duplication by ~40 lines across rule database operations
+  - All rule-service tests pass; behavior unchanged.
 
 ## Recent Decisions
 - **Evaluator output format**: One message per client_id (not one message with all matches)

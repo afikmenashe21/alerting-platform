@@ -65,3 +65,37 @@ func (db *DB) Close() error {
 	}
 	return nil
 }
+
+// scanRule scans a rule from a sql.Row or sql.Rows into a Rule struct.
+// Used by GetRule, ListRules, GetRulesUpdatedSince, UpdateRule, ToggleRuleEnabled, and CreateRule.
+func scanRule(scanner interface {
+	Scan(dest ...interface{}) error
+}) (*Rule, error) {
+	var rule Rule
+	err := scanner.Scan(
+		&rule.RuleID,
+		&rule.ClientID,
+		&rule.Severity,
+		&rule.Source,
+		&rule.Name,
+		&rule.Enabled,
+		&rule.Version,
+		&rule.CreatedAt,
+		&rule.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &rule, nil
+}
+
+// checkRuleVersionMismatch checks if a rule exists but has a version mismatch.
+// Returns an error if the rule exists but version doesn't match, nil otherwise.
+func (db *DB) checkRuleVersionMismatch(ctx context.Context, ruleID string, expectedVersion int) error {
+	var exists bool
+	checkQuery := `SELECT EXISTS(SELECT 1 FROM rules WHERE rule_id = $1)`
+	if err := db.conn.QueryRowContext(ctx, checkQuery, ruleID).Scan(&exists); err == nil && exists {
+		return fmt.Errorf("rule version mismatch: expected version %d", expectedVersion)
+	}
+	return nil
+}
