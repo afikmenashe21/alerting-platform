@@ -188,3 +188,16 @@ func GenerateTestAlert() *Alert {
 		Context:       make(map[string]string),
 	}
 }
+
+// GenerateCustomAlert creates an alert with user-specified severity, source, and name.
+func GenerateCustomAlert(severity, source, name string) *Alert {
+	return &Alert{
+		AlertID:       uuid.New().String(),
+		SchemaVersion: 1,
+		EventTS:       time.Now().Unix(),
+		Severity:      severity,
+		Source:        source,
+		Name:          name,
+		Context:       make(map[string]string),
+	}
+}

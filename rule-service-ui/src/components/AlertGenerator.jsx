@@ -22,15 +22,33 @@ function AlertGenerator() {
     mock: false,
     test: false,
     single_test: false,
+    // Single alert properties
+    severity: 'LOW',
+    source: 'test-source',
+    name: 'test-name',
   });
 
-  // Load job history on mount
+  // Load job history and restore active job on mount
   useEffect(() => {
     loadJobHistory();
+    
+    // Restore active job from localStorage
+    const savedJobId = localStorage.getItem('alertGenerator_activeJobId');
+    if (savedJobId) {
+      restoreActiveJob(savedJobId);
+    }
   }, []);
 
-  // Poll active job status
+  // Save active job ID to localStorage and poll status
   useEffect(() => {
+    if (activeJob) {
+      // Save to localStorage
+      localStorage.setItem('alertGenerator_activeJobId', activeJob.id);
+    } else {
+      // Clear from localStorage when no active job
+      localStorage.removeItem('alertGenerator_activeJobId');
+    }
+
     if (!activeJob) return;
 
     const interval = setInterval(async () => {
@@ -42,14 +60,37 @@ function AlertGenerator() {
           clearInterval(interval);
           loadJobHistory();
           setActiveJob(null);
+          localStorage.removeItem('alertGenerator_activeJobId');
         }
       } catch (err) {
         console.error('Failed to fetch job status:', err);
+        // If job not found, clear it
+        if (err.message && err.message.includes('not found')) {
+          clearInterval(interval);
+          setActiveJob(null);
+          localStorage.removeItem('alertGenerator_activeJobId');
+        }
       }
-    }, 1000); // Poll every second
+    }, 500); // Poll every 500ms for better progress updates
 
     return () => clearInterval(interval);
   }, [activeJob]);
+
+  const restoreActiveJob = async (jobId) => {
+    try {
+      const status = await alertGeneratorAPI.getStatus(jobId);
+      // Only restore if job is still running
+      if (status.status === 'running' || status.status === 'pending') {
+        setActiveJob(status);
+      } else {
+        // Job completed, remove from localStorage
+        localStorage.removeItem('alertGenerator_activeJobId');
+      }
+    } catch (err) {
+      console.error('Failed to restore active job:', err);
+      localStorage.removeItem('alertGenerator_activeJobId');
+    }
+  };
 
   const loadJobHistory = async () => {
     try {
@@ -72,9 +113,16 @@ function AlertGenerator() {
     try {
       let presetConfig = {};
       
+      // Set preset-specific values
       switch (preset) {
         case 'single-test':
-          presetConfig = { single_test: true };
+          // Use current config values for single alert
+          presetConfig = { 
+            single_test: true,
+            severity: config.severity || 'LOW',
+            source: config.source || 'test-source',
+            name: config.name || 'test-name'
+          };
           break;
         case 'test-mode':
           presetConfig = { test: true, rps: 5, duration: '30s' };
@@ -91,6 +139,38 @@ function AlertGenerator() {
         default:
           return;
       }
+      
+      // Merge with advanced configuration settings
+      // This allows presets to respect user's advanced settings
+      if (config.severity_dist && config.severity_dist.trim() !== '' && !presetConfig.single_test) {
+        presetConfig.severity_dist = config.severity_dist.trim();
+      }
+      if (config.source_dist && config.source_dist.trim() !== '' && !presetConfig.single_test) {
+        presetConfig.source_dist = config.source_dist.trim();
+      }
+      if (config.name_dist && config.name_dist.trim() !== '' && !presetConfig.single_test) {
+        presetConfig.name_dist = config.name_dist.trim();
+      }
+      
+      // Always include Kafka settings if configured
+      if (config.kafka_brokers && config.kafka_brokers.trim() !== '') {
+        presetConfig.kafka_brokers = config.kafka_brokers.trim();
+      }
+      if (config.topic && config.topic.trim() !== '') {
+        presetConfig.topic = config.topic.trim();
+      }
+      
+      // Include seed if configured
+      if (config.seed !== null && config.seed !== '' && !isNaN(parseInt(config.seed))) {
+        presetConfig.seed = parseInt(config.seed);
+      }
+      
+      // Include mock mode if enabled
+      if (config.mock) {
+        presetConfig.mock = true;
+      }
+      
+      console.log('Sending preset config with advanced settings:', presetConfig);
       
       const response = await alertGeneratorAPI.generate(presetConfig);
       const status = await alertGeneratorAPI.getStatus(response.job_id);
@@ -118,20 +198,72 @@ function AlertGenerator() {
     setLoading(true);
     
     try {
-      // Build config object, only including non-empty values
+      // Build config object, properly handling empty/null values
       const requestConfig = {};
-      if (config.rps) requestConfig.rps = parseFloat(config.rps);
-      if (config.duration) requestConfig.duration = config.duration;
-      if (config.burst) requestConfig.burst = parseInt(config.burst);
-      if (config.seed) requestConfig.seed = parseInt(config.seed);
-      if (config.severity_dist) requestConfig.severity_dist = config.severity_dist;
-      if (config.source_dist) requestConfig.source_dist = config.source_dist;
-      if (config.name_dist) requestConfig.name_dist = config.name_dist;
-      if (config.kafka_brokers) requestConfig.kafka_brokers = config.kafka_brokers;
-      if (config.topic) requestConfig.topic = config.topic;
-      if (config.mock) requestConfig.mock = config.mock;
-      if (config.test) requestConfig.test = config.test;
-      if (config.single_test) requestConfig.single_test = config.single_test;
+      
+      // RPS: only include if it's a valid number > 0
+      if (config.rps && !isNaN(parseFloat(config.rps)) && parseFloat(config.rps) > 0) {
+        requestConfig.rps = parseFloat(config.rps);
+      }
+      
+      // Duration: only include if it's a non-empty string
+      if (config.duration && config.duration.trim() !== '') {
+        requestConfig.duration = config.duration.trim();
+      }
+      
+      // Burst: only include if it's a valid integer > 0
+      if (config.burst !== null && config.burst !== '' && !isNaN(parseInt(config.burst)) && parseInt(config.burst) > 0) {
+        requestConfig.burst = parseInt(config.burst);
+      }
+      
+      // Seed: only include if it's a valid integer
+      if (config.seed !== null && config.seed !== '' && !isNaN(parseInt(config.seed))) {
+        requestConfig.seed = parseInt(config.seed);
+      }
+      
+      // Boolean flags: check first as they affect what other fields are needed
+      requestConfig.mock = config.mock || false;
+      requestConfig.test = config.test || false;
+      requestConfig.single_test = config.single_test || false;
+      
+      // For single_test mode, include alert properties
+      if (requestConfig.single_test) {
+        if (config.severity && config.severity.trim() !== '') {
+          requestConfig.severity = config.severity.trim();
+        }
+        if (config.source && config.source.trim() !== '') {
+          requestConfig.source = config.source.trim();
+        }
+        if (config.name && config.name.trim() !== '') {
+          requestConfig.name = config.name.trim();
+        }
+      }
+      
+      // For single_test mode, distributions are not needed (uses custom alert)
+      // For test mode, distributions are optional (uses defaults if not provided)
+      // For normal mode, distributions are required but have defaults
+      if (!requestConfig.single_test) {
+        // Distributions: only include if non-empty (will use defaults if not provided)
+        if (config.severity_dist && config.severity_dist.trim() !== '') {
+          requestConfig.severity_dist = config.severity_dist.trim();
+        }
+        if (config.source_dist && config.source_dist.trim() !== '') {
+          requestConfig.source_dist = config.source_dist.trim();
+        }
+        if (config.name_dist && config.name_dist.trim() !== '') {
+          requestConfig.name_dist = config.name_dist.trim();
+        }
+      }
+      
+      // Kafka settings: only include if non-empty
+      if (config.kafka_brokers && config.kafka_brokers.trim() !== '') {
+        requestConfig.kafka_brokers = config.kafka_brokers.trim();
+      }
+      if (config.topic && config.topic.trim() !== '') {
+        requestConfig.topic = config.topic.trim();
+      }
+      
+      console.log('Sending request config:', requestConfig);
       
       const response = await alertGeneratorAPI.generate(requestConfig);
       const status = await alertGeneratorAPI.getStatus(response.job_id);
@@ -144,6 +276,7 @@ function AlertGenerator() {
         if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('ERR_CONNECTION_REFUSED')) {
           errorMessage = 'Cannot connect to alert-producer API. Make sure the API server is running:\n\ncd services/alert-producer && make run-api';
         } else {
+          // Error message should already be parsed by handleResponse
           errorMessage = err.message;
         }
       }
@@ -158,9 +291,14 @@ function AlertGenerator() {
     
     try {
       await alertGeneratorAPI.stop(activeJob.id);
+      // Poll once more to get updated status
       const status = await alertGeneratorAPI.getStatus(activeJob.id);
       setActiveJob(status);
       loadJobHistory();
+      // Clear from localStorage if cancelled
+      if (status.status === 'cancelled') {
+        localStorage.removeItem('alertGenerator_activeJobId');
+      }
     } catch (err) {
       console.error('Error stopping job:', err);
       let errorMessage = 'Failed to stop job';
@@ -202,14 +340,28 @@ function AlertGenerator() {
 
       {/* Preset Buttons */}
       <div className="presets" style={{ marginBottom: '2rem' }}>
-        <h3>Quick Start</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <h3 style={{ margin: 0 }}>Quick Start</h3>
+          <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+            Presets use your advanced configuration (distributions, Kafka settings, etc.)
+          </span>
+        </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button 
-            onClick={() => handlePreset('single-test')} 
+            type="button"
+            onClick={() => {
+              setConfig({ ...config, single_test: !config.single_test });
+            }}
             disabled={loading || activeJob}
-            style={{ padding: '0.5rem 1rem', cursor: loading || activeJob ? 'not-allowed' : 'pointer' }}
+            style={{ 
+              padding: '0.5rem 1rem', 
+              cursor: loading || activeJob ? 'not-allowed' : 'pointer',
+              background: config.single_test ? '#007bff' : '#f8f9fa',
+              color: config.single_test ? 'white' : 'black',
+              border: '1px solid #ddd'
+            }}
           >
-            Single Test Alert
+            {config.single_test ? '✓ Single Alert Mode' : 'Single Alert Mode'}
           </button>
           <button 
             onClick={() => handlePreset('test-mode')} 
@@ -255,6 +407,57 @@ function AlertGenerator() {
         </div>
 
         <form onSubmit={handleGenerate}>
+          {/* Single Alert Configuration - shown when single_test is checked */}
+          {config.single_test && (
+            <div style={{ 
+              marginBottom: '1rem', 
+              padding: '1rem', 
+              background: '#e7f3ff', 
+              borderRadius: '4px',
+              border: '1px solid #b3d9ff'
+            }}>
+              <h4 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Single Alert Configuration</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label>Severity:</label>
+                  <select
+                    value={config.severity}
+                    onChange={(e) => setConfig({ ...config, severity: e.target.value })}
+                    disabled={loading || activeJob}
+                    style={{ width: '100%', padding: '0.5rem' }}
+                  >
+                    <option value="LOW">LOW</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="HIGH">HIGH</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Source:</label>
+                  <input
+                    type="text"
+                    value={config.source}
+                    onChange={(e) => setConfig({ ...config, source: e.target.value })}
+                    disabled={loading || activeJob}
+                    placeholder="e.g., api, db, cache"
+                    style={{ width: '100%', padding: '0.5rem' }}
+                  />
+                </div>
+                <div>
+                  <label>Name:</label>
+                  <input
+                    type="text"
+                    value={config.name}
+                    onChange={(e) => setConfig({ ...config, name: e.target.value })}
+                    disabled={loading || activeJob}
+                    placeholder="e.g., timeout, error, crash"
+                    style={{ width: '100%', padding: '0.5rem' }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
             <div>
               <label>RPS (Alerts per second):</label>
@@ -263,7 +466,7 @@ function AlertGenerator() {
                 step="0.1"
                 value={config.rps}
                 onChange={(e) => setConfig({ ...config, rps: e.target.value })}
-                disabled={loading || activeJob}
+                disabled={loading || activeJob || config.single_test}
               />
             </div>
             <div>
@@ -272,7 +475,7 @@ function AlertGenerator() {
                 type="text"
                 value={config.duration}
                 onChange={(e) => setConfig({ ...config, duration: e.target.value })}
-                disabled={loading || activeJob}
+                disabled={loading || activeJob || config.single_test}
                 placeholder="60s"
               />
             </div>
@@ -282,7 +485,7 @@ function AlertGenerator() {
                 type="number"
                 value={config.burst || ''}
                 onChange={(e) => setConfig({ ...config, burst: e.target.value || null })}
-                disabled={loading || activeJob}
+                disabled={loading || activeJob || config.single_test}
                 placeholder="0"
               />
             </div>
@@ -292,7 +495,7 @@ function AlertGenerator() {
                 type="number"
                 value={config.seed || ''}
                 onChange={(e) => setConfig({ ...config, seed: e.target.value || null })}
-                disabled={loading || activeJob}
+                disabled={loading || activeJob || config.single_test}
                 placeholder="0"
               />
             </div>
@@ -398,19 +601,68 @@ function AlertGenerator() {
 
       {/* Active Job Status */}
       {activeJob && (
-        <div className="active-job" style={{ marginTop: '2rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '4px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <h3>Active Job: {activeJob.id}</h3>
+        <div className="active-job" style={{ marginTop: '2rem', padding: '1rem', border: '2px solid #007bff', borderRadius: '4px', background: '#f8f9fa' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h3 style={{ margin: 0 }}>Active Job: {activeJob.id.substring(0, 8)}...</h3>
             {activeJob.status === 'running' && (
-              <button onClick={handleStop} style={{ padding: '0.5rem 1rem', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                Stop
+              <button 
+                onClick={handleStop} 
+                style={{ 
+                  padding: '0.5rem 1rem', 
+                  background: '#dc3545', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '4px', 
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Stop Job
               </button>
             )}
           </div>
+          
+          {/* Progress Bar for Running Jobs */}
+          {activeJob.status === 'running' && activeJob.config && (
+            <div style={{ marginBottom: '1rem' }}>
+              {activeJob.config.burst && activeJob.config.burst > 0 ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                    <span><strong>Progress:</strong> {activeJob.alerts_sent || 0} / {activeJob.config.burst}</span>
+                    <span><strong>{Math.round(((activeJob.alerts_sent || 0) / activeJob.config.burst) * 100)}%</strong></span>
+                  </div>
+                  <div style={{ 
+                    width: '100%', 
+                    height: '20px', 
+                    background: '#e9ecef', 
+                    borderRadius: '10px', 
+                    overflow: 'hidden' 
+                  }}>
+                    <div style={{
+                      width: `${Math.min(((activeJob.alerts_sent || 0) / activeJob.config.burst) * 100, 100)}%`,
+                      height: '100%',
+                      background: '#28a745',
+                      transition: 'width 0.3s ease'
+                    }} />
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <strong>Alerts Sent:</strong> {activeJob.alerts_sent || 0}
+                  {activeJob.config.rps && (
+                    <span style={{ marginLeft: '1rem', color: '#6c757d' }}>
+                      (Target: {activeJob.config.rps} RPS)
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
             <div>
               <strong>Status:</strong> 
-              <span style={{ color: getStatusColor(activeJob.status), marginLeft: '0.5rem' }}>
+              <span style={{ color: getStatusColor(activeJob.status), marginLeft: '0.5rem', fontWeight: 'bold' }}>
                 {activeJob.status.toUpperCase()}
               </span>
             </div>
@@ -427,7 +679,7 @@ function AlertGenerator() {
             )}
           </div>
           {activeJob.error && (
-            <div style={{ marginTop: '0.5rem', color: '#dc3545' }}>
+            <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f8d7da', borderRadius: '4px', color: '#dc3545' }}>
               <strong>Error:</strong> {activeJob.error}
             </div>
           )}

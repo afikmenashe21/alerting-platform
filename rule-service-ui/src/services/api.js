@@ -9,13 +9,23 @@ async function handleResponse(response) {
   
   if (!response.ok) {
     let errorText;
+    let errorMessage;
     try {
       errorText = await response.text();
       console.error('Error response body:', errorText);
+      
+      // Try to parse as JSON to extract error message
+      try {
+        const errorObj = JSON.parse(errorText);
+        errorMessage = errorObj.error || errorText;
+      } catch (parseErr) {
+        // Not JSON, use text as-is
+        errorMessage = errorText || `HTTP error! status: ${response.status}`;
+      }
     } catch (e) {
-      errorText = `HTTP error! status: ${response.status}`;
+      errorMessage = `HTTP error! status: ${response.status}`;
     }
-    throw new Error(errorText || `HTTP error! status: ${response.status}`);
+    throw new Error(errorMessage || `HTTP error! status: ${response.status}`);
   }
   
   // Handle 204 No Content

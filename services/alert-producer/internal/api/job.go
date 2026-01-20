@@ -3,9 +3,13 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
+	"alert-producer/internal/config"
 	"alert-producer/internal/generator"
 	"alert-producer/internal/processor"
 	"alert-producer/internal/producer"
@@ -26,16 +30,16 @@ const (
 
 // Job represents a single alert generation job.
 type Job struct {
-	ID          string                 `json:"id"`
-	Status      JobStatus              `json:"status"`
-	Config      *GenerateRequest       `json:"config"`
-	CreatedAt   time.Time              `json:"created_at"`
-	StartedAt   *time.Time             `json:"started_at,omitempty"`
-	CompletedAt *time.Time             `json:"completed_at,omitempty"`
-	AlertsSent  int64                  `json:"alerts_sent"`
-	Error       string                 `json:"error,omitempty"`
-	cancelFunc  context.CancelFunc     `json:"-"`
-	mu          sync.RWMutex           `json:"-"`
+	ID          string             `json:"id"`
+	Status      JobStatus          `json:"status"`
+	Config      *GenerateRequest   `json:"config"`
+	CreatedAt   time.Time          `json:"created_at"`
+	StartedAt   *time.Time         `json:"started_at,omitempty"`
+	CompletedAt *time.Time         `json:"completed_at,omitempty"`
+	AlertsSent  int64              `json:"alerts_sent"`
+	Error       string             `json:"error,omitempty"`
+	cancelFunc  context.CancelFunc `json:"-"`
+	mu          sync.RWMutex       `json:"-"`
 }
 
 // JobManager manages alert generation jobs.
@@ -149,17 +153,18 @@ func (j *Job) SetCancelFunc(cancel context.CancelFunc) {
 }
 
 // Cancel cancels the job if it's running.
+// It calls the cancel function to signal cancellation, but doesn't update status immediately.
+// The goroutine will detect cancellation and update status to cancelled.
 func (j *Job) Cancel() {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if j.cancelFunc != nil {
+		// Call cancel function to signal cancellation to the goroutine
 		j.cancelFunc()
+		// Clear the cancel function to prevent double cancellation
+		j.cancelFunc = nil
 	}
-	if j.Status == JobStatusPending || j.Status == JobStatusRunning {
-		j.Status = JobStatusCancelled
-		now := time.Now()
-		j.CompletedAt = &now
-	}
+	// Don't update status here - let the goroutine handle it when it detects cancellation
 }
 
 // generateJobID generates a unique job ID using UUID.
@@ -183,8 +188,10 @@ func (jm *JobManager) RunJob(job *Job, kafkaBrokers string) {
 			return
 		}
 
-		// Validate config
-		if err := cfg.Validate(); err != nil {
+		// Validate config (skip distribution validation for single_test mode)
+		// Note: This is a fallback validation - main validation happens in handlers
+		// For single_test, distributions aren't needed since it uses hardcoded test alert
+		if err := validateConfigForJob(&cfg, job.Config.SingleTest); err != nil {
 			job.UpdateStatus(JobStatusFailed)
 			job.SetError(err)
 			return
@@ -218,44 +225,53 @@ func (jm *JobManager) RunJob(job *Job, kafkaBrokers string) {
 		// Run appropriate mode
 		var runErr error
 		if job.Config.SingleTest {
-			// Single test mode
-			testAlert := generator.GenerateTestAlert()
-			runErr = alertPublisher.Publish(ctx, testAlert)
+			// Single test mode - use user-provided values or defaults
+			severity := job.Config.Severity
+			if severity == "" {
+				severity = "LOW" // Default
+			}
+			source := job.Config.Source
+			if source == "" {
+				source = "test-source" // Default
+			}
+			name := job.Config.Name
+			if name == "" {
+				name = "test-name" // Default
+			}
+			customAlert := generator.GenerateCustomAlert(severity, source, name)
+			runErr = alertPublisher.Publish(ctx, customAlert)
 			if runErr == nil {
 				job.IncrementAlertsSent()
 			}
 		} else if job.Config.Test {
-			// Test mode
-			runErr = proc.ProcessTest(ctx, cfg.RPS, cfg.Duration, cfg.BurstSize)
-			// Estimate alerts sent for test mode
-			if runErr == nil {
-				if cfg.BurstSize > 0 {
-					job.SetAlertsSent(int64(cfg.BurstSize))
-				} else {
-					// Estimate: RPS * duration
-					estimated := int64(cfg.RPS * cfg.Duration.Seconds())
-					job.SetAlertsSent(estimated)
-				}
+			// Test mode - track progress in real-time
+			if cfg.BurstSize > 0 {
+				runErr = proc.ProcessTestBurstWithProgress(ctx, cfg.BurstSize, func(sent int) {
+					job.SetAlertsSent(int64(sent))
+				})
+			} else {
+				runErr = proc.ProcessTestContinuousWithProgress(ctx, cfg.RPS, cfg.Duration, func(sent int) {
+					job.SetAlertsSent(int64(sent))
+				})
 			}
 		} else if cfg.BurstSize > 0 {
-			// Burst mode
-			runErr = proc.ProcessBurst(ctx, cfg.BurstSize)
-			if runErr == nil {
-				job.SetAlertsSent(int64(cfg.BurstSize))
-			}
+			// Burst mode - track progress in real-time
+			runErr = proc.ProcessBurstWithProgress(ctx, cfg.BurstSize, func(sent int) {
+				job.SetAlertsSent(int64(sent))
+			})
 		} else {
-			// Continuous mode
-			runErr = proc.ProcessContinuous(ctx, cfg.RPS, cfg.Duration)
-			if runErr == nil {
-				// Estimate: RPS * duration
-				estimated := int64(cfg.RPS * cfg.Duration.Seconds())
-				job.SetAlertsSent(estimated)
-			}
+			// Continuous mode - track progress in real-time
+			runErr = proc.ProcessContinuousWithProgress(ctx, cfg.RPS, cfg.Duration, func(sent int) {
+				job.SetAlertsSent(int64(sent))
+			})
 		}
 
 		if runErr != nil {
-			if runErr == context.Canceled {
+			// Check if error is due to context cancellation
+			if errors.Is(runErr, context.Canceled) || ctx.Err() == context.Canceled {
+				// Job was cancelled - update status
 				job.UpdateStatus(JobStatusCancelled)
+				slog.Info("Job cancelled by user", "job_id", job.ID, "alerts_sent", job.GetAlertsSent())
 			} else {
 				job.UpdateStatus(JobStatusFailed)
 				job.SetError(runErr)
@@ -263,6 +279,50 @@ func (jm *JobManager) RunJob(job *Job, kafkaBrokers string) {
 			return
 		}
 
-		job.UpdateStatus(JobStatusCompleted)
+		// Check if context was cancelled before marking as completed
+		select {
+		case <-ctx.Done():
+			job.UpdateStatus(JobStatusCancelled)
+			slog.Info("Job cancelled before completion", "job_id", job.ID, "alerts_sent", job.GetAlertsSent())
+		default:
+			job.UpdateStatus(JobStatusCompleted)
+		}
 	}()
+}
+
+// validateConfigForJob validates configuration for job execution.
+// Skips distribution and RPS/duration validation when singleTest is true.
+func validateConfigForJob(cfg *config.Config, singleTest bool) error {
+	if cfg.KafkaBrokers == "" {
+		return fmt.Errorf("kafka-brokers cannot be empty")
+	}
+	if cfg.Topic == "" {
+		return fmt.Errorf("topic cannot be empty")
+	}
+
+	// For single_test mode, RPS/duration/burst are not needed (just sends one alert)
+	if !singleTest {
+		if cfg.RPS <= 0 && cfg.BurstSize <= 0 {
+			return fmt.Errorf("rps must be > 0 or burst must be > 0")
+		}
+		if cfg.BurstSize == 0 && cfg.Duration <= 0 {
+			return fmt.Errorf("duration must be > 0 when not in burst mode")
+		}
+	}
+
+	// Skip distribution validation for single_test mode (not needed)
+	if !singleTest {
+		// Validate distribution strings
+		if _, err := config.ParseDistribution(cfg.SeverityDist); err != nil {
+			return fmt.Errorf("invalid severity-dist: %w", err)
+		}
+		if _, err := config.ParseDistribution(cfg.SourceDist); err != nil {
+			return fmt.Errorf("invalid source-dist: %w", err)
+		}
+		if _, err := config.ParseDistribution(cfg.NameDist); err != nil {
+			return fmt.Errorf("invalid name-dist: %w", err)
+		}
+	}
+
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -219,9 +220,21 @@ func (p *Producer) Publish(ctx context.Context, alert *generator.Alert) error {
 	maxRetries := 2
 	var writeErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Check if context is cancelled before attempting to write
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		writeErr = p.writer.WriteMessages(ctx, msg)
 		if writeErr == nil {
 			return nil
+		}
+
+		// Check if error is due to context cancellation
+		if errors.Is(writeErr, context.Canceled) || ctx.Err() == context.Canceled {
+			return context.Canceled
 		}
 
 		// Check if error is due to topic not existing

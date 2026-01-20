@@ -25,6 +25,10 @@ type GenerateRequest struct {
 	Mock         bool     `json:"mock,omitempty"`
 	Test         bool     `json:"test,omitempty"`
 	SingleTest   bool     `json:"single_test,omitempty"`
+	// Single alert properties (used when single_test is true)
+	Severity     string   `json:"severity,omitempty"` // e.g., "HIGH", "LOW", "MEDIUM", "CRITICAL"
+	Source       string   `json:"source,omitempty"`   // e.g., "api", "db", "cache"
+	Name         string   `json:"name,omitempty"`     // e.g., "timeout", "error", "crash"
 }
 
 // ToConfig converts a GenerateRequest to a config.Config.
@@ -114,6 +118,36 @@ func HandleGenerate(jm *JobManager, defaultKafkaBrokers string) http.HandlerFunc
 			return
 		}
 
+		// Validate configuration before creating job
+		cfg, err := req.ToConfig(defaultKafkaBrokers)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, fmt.Sprintf("Invalid configuration: %v", err))
+			return
+		}
+		
+		// For single_test mode, skip distribution validation (not needed for custom single alert)
+		// For other modes, validate everything including distributions
+		if err := validateConfig(&cfg, req.SingleTest); err != nil {
+			respondError(w, http.StatusBadRequest, fmt.Sprintf("Configuration validation failed: %v", err))
+			return
+		}
+		
+		// Validate single alert properties if single_test is enabled
+		if req.SingleTest {
+			if req.Severity == "" && req.Source == "" && req.Name == "" {
+				// All empty - use defaults, this is fine
+			} else {
+				// At least one is provided, validate severity if provided
+				if req.Severity != "" {
+					validSeverities := map[string]bool{"LOW": true, "MEDIUM": true, "HIGH": true, "CRITICAL": true}
+					if !validSeverities[req.Severity] {
+						respondError(w, http.StatusBadRequest, fmt.Sprintf("Invalid severity: %s (must be LOW, MEDIUM, HIGH, or CRITICAL)", req.Severity))
+						return
+					}
+				}
+			}
+		}
+
 		// Create job
 		job := jm.CreateJob(&req)
 
@@ -191,9 +225,22 @@ func HandleStopJob(jm *JobManager) http.HandlerFunc {
 			return
 		}
 
+		// Check if job can be cancelled
+		currentStatus := job.GetStatus()
+		if currentStatus != JobStatusPending && currentStatus != JobStatusRunning {
+			respondError(w, http.StatusBadRequest, fmt.Sprintf("Job cannot be cancelled. Current status: %s", currentStatus))
+			return
+		}
+
+		// Cancel the job (this cancels the context, goroutine will update status)
 		job.Cancel()
 
-		respondJSON(w, http.StatusOK, jobToResponse(job))
+		// Wait a moment for the goroutine to detect cancellation and update status
+		time.Sleep(100 * time.Millisecond)
+
+		// Get updated job status
+		updatedJob, _ := jm.GetJob(jobID)
+		respondJSON(w, http.StatusOK, jobToResponse(updatedJob))
 	}
 }
 
@@ -236,6 +283,43 @@ func respondJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 // respondError sends an error response.
 func respondError(w http.ResponseWriter, statusCode int, message string) {
 	respondJSON(w, statusCode, ErrorResponse{Error: message})
+}
+
+// validateConfig validates the configuration, optionally skipping distribution validation.
+// When skipDistributions is true (single_test mode), also skips RPS/duration validation.
+func validateConfig(cfg *config.Config, skipDistributions bool) error {
+	if cfg.KafkaBrokers == "" {
+		return fmt.Errorf("kafka-brokers cannot be empty")
+	}
+	if cfg.Topic == "" {
+		return fmt.Errorf("topic cannot be empty")
+	}
+	
+	// For single_test mode, RPS/duration/burst are not needed (just sends one alert)
+	if !skipDistributions {
+		if cfg.RPS <= 0 && cfg.BurstSize <= 0 {
+			return fmt.Errorf("rps must be > 0 or burst must be > 0")
+		}
+		if cfg.BurstSize == 0 && cfg.Duration <= 0 {
+			return fmt.Errorf("duration must be > 0 when not in burst mode")
+		}
+	}
+	
+	// Skip distribution validation for single_test mode (not needed)
+	if !skipDistributions {
+		// Validate distribution strings
+		if _, err := config.ParseDistribution(cfg.SeverityDist); err != nil {
+			return fmt.Errorf("invalid severity-dist: %w", err)
+		}
+		if _, err := config.ParseDistribution(cfg.SourceDist); err != nil {
+			return fmt.Errorf("invalid source-dist: %w", err)
+		}
+		if _, err := config.ParseDistribution(cfg.NameDist); err != nil {
+			return fmt.Errorf("invalid name-dist: %w", err)
+		}
+	}
+	
+	return nil
 }
 
 // parseInt parses an integer from a string, returning 0 if empty or invalid.

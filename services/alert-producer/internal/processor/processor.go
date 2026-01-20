@@ -5,6 +5,7 @@ package processor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -20,6 +21,11 @@ const (
 	// burstProgressInterval defines how often to log progress in burst mode (every N alerts)
 	burstProgressInterval = 100
 )
+
+// isCancelled checks if an error is due to context cancellation.
+func isCancelled(ctx context.Context, err error) bool {
+	return errors.Is(err, context.Canceled) || ctx.Err() == context.Canceled
+}
 
 // Processor orchestrates alert generation and publishing.
 type Processor struct {
@@ -42,6 +48,10 @@ func (p *Processor) Process(ctx context.Context) error {
 	// Send boilerplate alert first
 	boilerplateAlert := generator.GenerateBoilerplate()
 	if err := p.publisher.Publish(ctx, boilerplateAlert); err != nil {
+		// Check if error is due to context cancellation
+		if isCancelled(ctx, err) {
+			return context.Canceled
+		}
 		slog.Error("Failed to publish boilerplate alert",
 			"alert_id", boilerplateAlert.AlertID,
 			"severity", boilerplateAlert.Severity,
@@ -70,9 +80,19 @@ func (p *Processor) ProcessBurst(ctx context.Context, burstSize int) error {
 	return p.runBurstModeWithSize(ctx, burstSize)
 }
 
+// ProcessBurstWithProgress runs burst mode with progress callback.
+func (p *Processor) ProcessBurstWithProgress(ctx context.Context, burstSize int, progressCallback func(sent int)) error {
+	return p.runBurstModeWithSizeAndProgress(ctx, burstSize, progressCallback)
+}
+
 // ProcessContinuous runs continuous mode: generates and publishes alerts at a fixed rate.
 func (p *Processor) ProcessContinuous(ctx context.Context, rps float64, duration time.Duration) error {
 	return p.runContinuousModeWithParams(ctx, rps, duration)
+}
+
+// ProcessContinuousWithProgress runs continuous mode with progress callback.
+func (p *Processor) ProcessContinuousWithProgress(ctx context.Context, rps float64, duration time.Duration, progressCallback func(sent int)) error {
+	return p.runContinuousModeWithParamsAndProgress(ctx, rps, duration, progressCallback)
 }
 
 // ProcessTest runs test mode: generates varied alerts including one test alert.
@@ -81,6 +101,16 @@ func (p *Processor) ProcessTest(ctx context.Context, rps float64, duration time.
 		return p.runTestBurstMode(ctx, burstSize)
 	}
 	return p.runTestContinuousMode(ctx, rps, duration)
+}
+
+// ProcessTestBurstWithProgress runs test burst mode with progress callback.
+func (p *Processor) ProcessTestBurstWithProgress(ctx context.Context, burstSize int, progressCallback func(sent int)) error {
+	return p.runTestBurstModeWithProgress(ctx, burstSize, progressCallback)
+}
+
+// ProcessTestContinuousWithProgress runs test continuous mode with progress callback.
+func (p *Processor) ProcessTestContinuousWithProgress(ctx context.Context, rps float64, duration time.Duration, progressCallback func(sent int)) error {
+	return p.runTestContinuousModeWithProgress(ctx, rps, duration, progressCallback)
 }
 
 // runBurstMode sends a fixed number of alerts immediately without rate limiting.
@@ -104,6 +134,11 @@ func (p *Processor) runBurstModeWithSize(ctx context.Context, burstSize int) err
 
 		alert := p.generator.Generate()
 		if err := p.publisher.Publish(ctx, alert); err != nil {
+			// Check if error is due to context cancellation
+			if isCancelled(ctx, err) {
+				slog.Warn("Publish cancelled during burst", "sent", i, "requested", burstSize)
+				return context.Canceled
+			}
 			slog.Error("Failed to publish alert",
 				"alert_id", alert.AlertID,
 				"severity", alert.Severity,
@@ -113,6 +148,70 @@ func (p *Processor) runBurstModeWithSize(ctx context.Context, burstSize int) err
 				"alert_number", i+1,
 			)
 			return fmt.Errorf("failed to publish alert %d: %w", i+1, err)
+		}
+
+		// Log first alert with full details for verification
+		if i == 0 {
+			logAlertDetails("Published first alert (sample)", alert)
+		}
+
+		// Log progress periodically to avoid log spam
+		if (i+1)%burstProgressInterval == 0 {
+			elapsed := time.Since(startTime).Seconds()
+			rate := float64(i+1) / elapsed
+			slog.Info("Burst progress",
+				"sent", i+1,
+				"total", burstSize,
+				"rate_per_sec", fmt.Sprintf("%.2f", rate),
+			)
+		}
+	}
+
+	elapsed := time.Since(startTime).Seconds()
+	rate := float64(burstSize) / elapsed
+	slog.Info("Burst mode completed",
+		"total_sent", burstSize,
+		"duration_sec", fmt.Sprintf("%.2f", elapsed),
+		"rate_per_sec", fmt.Sprintf("%.2f", rate),
+	)
+	return nil
+}
+
+// runBurstModeWithSizeAndProgress sends a fixed number of alerts with progress updates.
+func (p *Processor) runBurstModeWithSizeAndProgress(ctx context.Context, burstSize int, progressCallback func(sent int)) error {
+	slog.Info("Starting burst mode", "total_alerts", burstSize)
+
+	startTime := time.Now()
+	for i := 0; i < burstSize; i++ {
+		// Check for cancellation before each alert
+		select {
+		case <-ctx.Done():
+			slog.Warn("Burst mode cancelled", "sent", i, "requested", burstSize)
+			return ctx.Err()
+		default:
+		}
+
+		alert := p.generator.Generate()
+		if err := p.publisher.Publish(ctx, alert); err != nil {
+			// Check if error is due to context cancellation
+			if isCancelled(ctx, err) {
+				slog.Warn("Publish cancelled during burst", "sent", i, "requested", burstSize)
+				return context.Canceled
+			}
+			slog.Error("Failed to publish alert",
+				"alert_id", alert.AlertID,
+				"severity", alert.Severity,
+				"source", alert.Source,
+				"name", alert.Name,
+				"error", err,
+				"alert_number", i+1,
+			)
+			return fmt.Errorf("failed to publish alert %d: %w", i+1, err)
+		}
+
+		// Update progress callback
+		if progressCallback != nil {
+			progressCallback(i + 1)
 		}
 
 		// Log first alert with full details for verification
@@ -190,6 +289,11 @@ func (p *Processor) runContinuousModeWithParams(ctx context.Context, rps float64
 			// Generate and publish alert
 			alert := p.generator.Generate()
 			if err := p.publisher.Publish(ctx, alert); err != nil {
+				// Check if error is due to context cancellation
+				if isCancelled(ctx, err) {
+					slog.Warn("Publish cancelled during continuous", "sent", totalSent)
+					return context.Canceled
+				}
 				slog.Error("Failed to publish alert",
 					"alert_id", alert.AlertID,
 					"severity", alert.Severity,
@@ -202,6 +306,94 @@ func (p *Processor) runContinuousModeWithParams(ctx context.Context, rps float64
 			}
 
 			totalSent++
+
+			// Log first alert with full details for verification
+			if !firstAlertLogged {
+				logAlertDetails("Published first alert (sample)", alert)
+				firstAlertLogged = true
+			}
+
+			// Log progress periodically with actual RPS calculation
+			if time.Since(lastLog) >= progressLogInterval {
+				elapsed := time.Since(startTime).Seconds()
+				actualRPS := float64(totalSent) / elapsed
+				slog.Info("Progress update",
+					"sent", totalSent,
+					"target_rps", rps,
+					"actual_rps", fmt.Sprintf("%.2f", actualRPS),
+					"elapsed_sec", fmt.Sprintf("%.2f", elapsed),
+				)
+				lastLog = time.Now()
+			}
+		}
+	}
+}
+
+// runContinuousModeWithParamsAndProgress generates and publishes alerts at a fixed rate with progress updates.
+func (p *Processor) runContinuousModeWithParamsAndProgress(ctx context.Context, rps float64, duration time.Duration, progressCallback func(sent int)) error {
+	slog.Info("Starting continuous mode",
+		"target_rps", rps,
+		"duration", duration,
+	)
+
+	// Calculate ticker interval to achieve target RPS
+	interval := time.Duration(float64(time.Second) / rps)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	deadline := time.Now().Add(duration)
+	startTime := time.Now()
+	totalSent := 0
+	lastLog := time.Now()
+	firstAlertLogged := false
+
+	for {
+		select {
+		case <-ctx.Done():
+			slog.Warn("Continuous mode cancelled",
+				"sent", totalSent,
+				"duration_requested", duration,
+			)
+			return ctx.Err()
+		case <-ticker.C:
+			// Check if we've exceeded the duration
+			if time.Now().After(deadline) {
+				elapsed := time.Since(startTime).Seconds()
+				actualRPS := float64(totalSent) / elapsed
+				slog.Info("Duration reached",
+					"total_sent", totalSent,
+					"duration_sec", fmt.Sprintf("%.2f", elapsed),
+					"target_rps", rps,
+					"actual_rps", fmt.Sprintf("%.2f", actualRPS),
+				)
+				return nil
+			}
+
+			// Generate and publish alert
+			alert := p.generator.Generate()
+			if err := p.publisher.Publish(ctx, alert); err != nil {
+				// Check if error is due to context cancellation
+				if isCancelled(ctx, err) {
+					slog.Warn("Publish cancelled during continuous", "sent", totalSent)
+					return context.Canceled
+				}
+				slog.Error("Failed to publish alert",
+					"alert_id", alert.AlertID,
+					"severity", alert.Severity,
+					"source", alert.Source,
+					"name", alert.Name,
+					"error", err,
+					"total_sent", totalSent,
+				)
+				return fmt.Errorf("failed to publish alert: %w", err)
+			}
+
+			totalSent++
+
+			// Update progress callback
+			if progressCallback != nil {
+				progressCallback(totalSent)
+			}
 
 			// Log first alert with full details for verification
 			if !firstAlertLogged {
@@ -248,6 +440,11 @@ func (p *Processor) runTestBurstMode(ctx context.Context, burstSize int) error {
 		}
 
 		if err := p.publisher.Publish(ctx, alert); err != nil {
+			// Check if error is due to context cancellation
+			if isCancelled(ctx, err) {
+				slog.Warn("Publish cancelled during test burst", "sent", i, "requested", burstSize)
+				return context.Canceled
+			}
 			slog.Error("Failed to publish alert",
 				"alert_id", alert.AlertID,
 				"severity", alert.Severity,
@@ -257,6 +454,71 @@ func (p *Processor) runTestBurstMode(ctx context.Context, burstSize int) error {
 				"alert_number", i+1,
 			)
 			return fmt.Errorf("failed to publish alert %d: %w", i+1, err)
+		}
+
+		if (i+1)%burstProgressInterval == 0 {
+			elapsed := time.Since(startTime).Seconds()
+			rate := float64(i+1) / elapsed
+			slog.Info("Test mode burst progress",
+				"sent", i+1,
+				"total", burstSize,
+				"rate_per_sec", fmt.Sprintf("%.2f", rate),
+			)
+		}
+	}
+
+	elapsed := time.Since(startTime).Seconds()
+	rate := float64(burstSize) / elapsed
+	slog.Info("Test mode burst completed",
+		"total_sent", burstSize,
+		"duration_sec", fmt.Sprintf("%.2f", elapsed),
+		"rate_per_sec", fmt.Sprintf("%.2f", rate),
+	)
+	return nil
+}
+
+// runTestBurstModeWithProgress sends N varied alerts with progress updates.
+func (p *Processor) runTestBurstModeWithProgress(ctx context.Context, burstSize int, progressCallback func(sent int)) error {
+	slog.Info("Test mode burst", "total_alerts", burstSize)
+	startTime := time.Now()
+	for i := 0; i < burstSize; i++ {
+		select {
+		case <-ctx.Done():
+			slog.Warn("Test mode burst cancelled", "sent", i, "requested", burstSize)
+			return ctx.Err()
+		default:
+		}
+
+		var alert *generator.Alert
+		// Include test alert once (at the beginning)
+		if i == 0 {
+			alert = generator.GenerateTestAlert()
+			logAlertDetails("Published test alert (LOW/test-source/test-name)", alert)
+		} else {
+			// Generate varied alerts
+			alert = p.generator.Generate()
+		}
+
+		if err := p.publisher.Publish(ctx, alert); err != nil {
+			// Check if error is due to context cancellation
+			if isCancelled(ctx, err) {
+				slog.Warn("Publish cancelled during test burst with progress", "sent", i, "requested", burstSize)
+				return context.Canceled
+			}
+			slog.Error("Failed to publish alert",
+				"alert_id", alert.AlertID,
+				"severity", alert.Severity,
+				"source", alert.Source,
+				"name", alert.Name,
+				"error", err,
+				"alert_number", i+1,
+			)
+			return fmt.Errorf("failed to publish alert %d: %w", i+1, err)
+		}
+
+		// Update progress callback
+		if progressCallback != nil {
+			progressCallback(i + 1)
 		}
 
 		if (i+1)%burstProgressInterval == 0 {
@@ -331,6 +593,11 @@ func (p *Processor) runTestContinuousMode(ctx context.Context, rps float64, dura
 			}
 
 			if err := p.publisher.Publish(ctx, alert); err != nil {
+				// Check if error is due to context cancellation
+				if isCancelled(ctx, err) {
+					slog.Warn("Publish cancelled during test continuous", "sent", totalSent)
+					return context.Canceled
+				}
 				slog.Error("Failed to publish alert",
 					"alert_id", alert.AlertID,
 					"severity", alert.Severity,
@@ -343,6 +610,101 @@ func (p *Processor) runTestContinuousMode(ctx context.Context, rps float64, dura
 			}
 
 			totalSent++
+
+			if !firstAlertLogged {
+				isTestAlert := alert.Severity == "LOW" && alert.Source == "test-source" && alert.Name == "test-name"
+				alertType := "varied"
+				if isTestAlert {
+					alertType = "test"
+				}
+				logAlertDetailsWithType("Published first alert (sample)", alert, alertType)
+				firstAlertLogged = true
+			}
+
+			if time.Since(lastLog) >= progressLogInterval {
+				elapsed := time.Since(startTime).Seconds()
+				actualRPS := float64(totalSent) / elapsed
+				slog.Info("Test mode progress",
+					"sent", totalSent,
+					"target_rps", rps,
+					"actual_rps", fmt.Sprintf("%.2f", actualRPS),
+					"elapsed_sec", fmt.Sprintf("%.2f", elapsed),
+					"test_alert_sent", testAlertSent,
+				)
+				lastLog = time.Now()
+			}
+		}
+	}
+}
+
+// runTestContinuousModeWithProgress sends varied alerts at specified RPS with progress updates.
+func (p *Processor) runTestContinuousModeWithProgress(ctx context.Context, rps float64, duration time.Duration, progressCallback func(sent int)) error {
+	slog.Info("Test mode continuous",
+		"target_rps", rps,
+		"duration", duration,
+	)
+
+	interval := time.Duration(float64(time.Second) / rps)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	deadline := time.Now().Add(duration)
+	startTime := time.Now()
+	totalSent := 0
+	lastLog := time.Now()
+	firstAlertLogged := false
+	testAlertSent := false
+
+	for {
+		select {
+		case <-ctx.Done():
+			slog.Warn("Test mode continuous cancelled",
+				"sent", totalSent,
+				"duration_requested", duration,
+			)
+			return ctx.Err()
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				elapsed := time.Since(startTime).Seconds()
+				actualRPS := float64(totalSent) / elapsed
+				slog.Info("Test mode duration reached",
+					"total_sent", totalSent,
+					"duration_sec", fmt.Sprintf("%.2f", elapsed),
+					"target_rps", rps,
+					"actual_rps", fmt.Sprintf("%.2f", actualRPS),
+					"test_alert_sent", testAlertSent,
+				)
+				return nil
+			}
+
+			var alert *generator.Alert
+			// Include test alert once (at the beginning)
+			if !testAlertSent {
+				alert = generator.GenerateTestAlert()
+				testAlertSent = true
+			} else {
+				// Generate varied alerts
+				alert = p.generator.Generate()
+			}
+
+			if err := p.publisher.Publish(ctx, alert); err != nil {
+				slog.Error("Failed to publish alert",
+					"alert_id", alert.AlertID,
+					"severity", alert.Severity,
+					"source", alert.Source,
+					"name", alert.Name,
+					"error", err,
+					"total_sent", totalSent,
+				)
+				return fmt.Errorf("failed to publish alert: %w", err)
+			}
+
+			totalSent++
+
+			// Update progress callback
+			if progressCallback != nil {
+				progressCallback(totalSent)
+			}
 
 			if !firstAlertLogged {
 				isTestAlert := alert.Severity == "LOW" && alert.Source == "test-source" && alert.Name == "test-name"
