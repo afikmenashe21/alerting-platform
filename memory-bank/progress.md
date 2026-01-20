@@ -62,6 +62,16 @@
   - Added `NewNotificationReady()` helper in `internal/events/events.go` to build NotificationReady from AlertMatched
   - Simplified processor code by using helper function instead of inline struct construction
   - All aggregator tests pass; behavior unchanged.
+- [x] alert-producer: code cleanup and modularization:
+  - Extracted redundant code patterns into shared helpers:
+    - `internal/processor/helpers.go`: Context cancellation checks, error handling, progress logging helpers
+    - Removed duplicate error handling and logging code across processor modes
+  - Split large files by resource/concern:
+    - `processor.go` (469 lines) → split into 5 files: processor.go, burst.go, continuous.go, test.go, helpers.go
+    - `job.go` (298 lines) → split into job.go (management) and executor.go (execution)
+    - `handlers.go` (324 lines) → split into 5 files: types.go, generate.go, job_handlers.go, health.go, helpers.go
+    - `producer.go` (288 lines) → split into producer.go and topic.go
+  - All alert-producer tests pass; behavior unchanged.
 
 ## Recent Decisions
 - **Evaluator output format**: One message per client_id (not one message with all matches)

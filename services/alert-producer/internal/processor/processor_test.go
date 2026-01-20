@@ -381,7 +381,7 @@ func TestProcessor_runBurstModeWithSize_ProgressLogging(t *testing.T) {
 
 	ctx := context.Background()
 	// Use burst size that triggers progress logging (100, 200, etc.)
-	err := proc.runBurstModeWithSize(ctx, 250)
+	err := proc.runBurstModeWithSize(ctx, 250, nil)
 	if err != nil {
 		t.Fatalf("runBurstModeWithSize should not error, got: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestProcessor_runContinuousModeWithParams_DurationReached(t *testing.T) {
 
 	ctx := context.Background()
 	// Use higher RPS and longer duration to ensure alerts are published
-	err := proc.runContinuousModeWithParams(ctx, 100.0, 200*time.Millisecond)
+	err := proc.runContinuousModeWithParams(ctx, 100.0, 200*time.Millisecond, nil)
 	if err != nil {
 		t.Fatalf("runContinuousModeWithParams should not error, got: %v", err)
 	}

@@ -45,6 +45,31 @@ internal/
 - Progress logging every 5 seconds in continuous mode
 - Processor coordinates between generator and producer
 
+## Code Cleanup and Modularization (Completed)
+- [x] Extracted redundant code patterns into shared helpers:
+  - `internal/processor/helpers.go`: Context cancellation checks, error handling, progress logging helpers
+  - Removed duplicate error handling and logging code across processor modes
+- [x] Split large files by resource/concern:
+  - `processor.go` (469 lines) → split into:
+    - `processor.go` (100 lines): Main struct and public API
+    - `burst.go` (67 lines): Burst mode implementation
+    - `continuous.go` (76 lines): Continuous mode implementation
+    - `test.go` (95 lines): Test mode implementation
+    - `helpers.go` (67 lines): Shared helper functions
+  - `job.go` (298 lines) → split into:
+    - `job.go` (172 lines): Job struct and JobManager (job management)
+    - `executor.go` (117 lines): Job execution logic
+  - `handlers.go` (324 lines) → split into:
+    - `types.go` (81 lines): Request/Response types and ToConfig
+    - `generate.go` (58 lines): HandleGenerate handler
+    - `job_handlers.go` (70 lines): Job-related handlers (get, list, stop)
+    - `health.go` (12 lines): Health check handler
+    - `helpers.go` (58 lines): Response helpers and validation
+  - `producer.go` (288 lines) → split into:
+    - `producer.go` (210 lines): Main producer implementation
+    - `topic.go` (90 lines): Topic creation logic
+- [x] All tests pass; behavior unchanged
+
 ## UI Integration (Planned)
 
 ### Integration with rule-service-ui
