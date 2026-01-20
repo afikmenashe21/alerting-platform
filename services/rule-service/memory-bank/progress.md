@@ -11,6 +11,22 @@
 - [x] Removed email fields from clients and rules tables (now managed via endpoints)
 - [x] Modular architecture with router and handler separation
 
+## Code health
+- [x] Deduplicated redundant code into private helpers:
+  - Validation helpers: `isValidSeverity()`, `isAllWildcards()`, `isValidEndpointType()` in `validation.go`
+  - HTTP helpers: `requireMethod()`, `decodeJSON()`, `writeJSON()`, `requireQueryParam()` in `validation.go`
+  - Database helper: `unmarshalNotificationContext()` in `database.go`
+  - Reduced ~30+ lines of duplicated code across handlers
+  - All tests pass; behavior unchanged.
+- [x] Modularized handlers package by resource type:
+  - Split 674-line `handlers.go` into separate files by resource:
+    - `clients.go` - client CRUD handlers
+    - `rules.go` - rule CRUD handlers with event publishing helper
+    - `endpoints.go` - endpoint CRUD handlers
+    - `notifications.go` - notification read handlers
+  - Improved maintainability and separation of concerns
+  - All tests pass; behavior unchanged.
+
 ## Architecture Decisions
 
 ### Modular Architecture with Router Pattern

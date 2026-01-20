@@ -18,6 +18,9 @@ In progress / Next:
 6) ✅ Centralized infrastructure management (Postgres, Kafka, Redis, Zookeeper)
 7) 🔄 UI Integration for alert-producer: Add HTTP API wrapper and UI component for generating alerts with optional manual config
 
+## Code health
+- Started safe cleanup passes that remove redundancy without changing behavior (e.g., shared validation helpers, shared JSON parsing helpers), keeping tests green.
+
 ## Decisions locked for MVP
 - Rules support exact match and wildcard "*" on (severity, source, name).
 - Dedupe in aggregator DB unique constraint.

@@ -64,6 +64,22 @@ type DB struct {
 	conn *sql.DB
 }
 
+func unmarshalNotificationContext(contextJSON sql.NullString, warnAttrs ...any) map[string]string {
+	if !contextJSON.Valid || contextJSON.String == "" {
+		return make(map[string]string)
+	}
+
+	var ctx map[string]string
+	if err := json.Unmarshal([]byte(contextJSON.String), &ctx); err != nil {
+		slog.Warn("Failed to unmarshal context JSON", append([]any{"error", err}, warnAttrs...)...)
+		return make(map[string]string)
+	}
+	if ctx == nil {
+		return make(map[string]string)
+	}
+	return ctx
+}
+
 // NewDB creates a new database connection using the provided DSN.
 func NewDB(dsn string) (*DB, error) {
 	conn, err := sql.Open("postgres", dsn)
@@ -623,15 +639,7 @@ func (db *DB) GetNotification(ctx context.Context, notificationID string) (*Noti
 		return nil, fmt.Errorf("failed to get notification: %w", err)
 	}
 
-	// Deserialize context JSON
-	if contextJSON.Valid && contextJSON.String != "" {
-		if err := json.Unmarshal([]byte(contextJSON.String), &notif.Context); err != nil {
-			slog.Warn("Failed to unmarshal context JSON", "error", err, "notification_id", notificationID)
-			notif.Context = make(map[string]string)
-		}
-	} else {
-		notif.Context = make(map[string]string)
-	}
+	notif.Context = unmarshalNotificationContext(contextJSON, "notification_id", notificationID)
 
 	return &notif, nil
 }
@@ -700,15 +708,7 @@ func (db *DB) ListNotifications(ctx context.Context, clientID *string, status *s
 			return nil, fmt.Errorf("failed to scan notification: %w", err)
 		}
 
-		// Deserialize context JSON
-		if contextJSON.Valid && contextJSON.String != "" {
-			if err := json.Unmarshal([]byte(contextJSON.String), &notif.Context); err != nil {
-				slog.Warn("Failed to unmarshal context JSON", "error", err)
-				notif.Context = make(map[string]string)
-			}
-		} else {
-			notif.Context = make(map[string]string)
-		}
+		notif.Context = unmarshalNotificationContext(contextJSON)
 
 		notifications = append(notifications, &notif)
 	}

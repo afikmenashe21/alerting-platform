@@ -6,6 +6,12 @@
 - ✅ Kafka producer: publishes rule.changed events after DB commits
 - ✅ Optimistic locking: version-based updates for rules
 - ✅ Event actions: CREATED, UPDATED, DELETED, DISABLED
+- ✅ Code cleanup and modularization:
+  - Removed redundant code via private helpers (validation, HTTP, JSON parsing)
+  - Modularized handlers package: split 674-line file into resource-specific files:
+    - `clients.go`, `rules.go`, `endpoints.go`, `notifications.go`
+  - Added `publishRuleChangedEvent()` helper to reduce duplication in rule handlers
+  - All tests pass; behavior unchanged
 
 ## Database Schema
 - **clients**: client_id (PK), name, timestamps

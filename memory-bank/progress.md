@@ -17,6 +17,14 @@
 - [x] alert-producer: generate alerts + load tests
 - [x] rule-service-ui: React UI for CRUD operations on clients, rules, and endpoints
 
+## Code health
+- [x] rule-service: code cleanup and modularization:
+  - Removed redundant code via private helpers (validation, HTTP, JSON parsing)
+  - Modularized handlers: split 674-line `handlers.go` into resource-specific files:
+    - `clients.go`, `rules.go`, `endpoints.go`, `notifications.go`
+  - Added `publishRuleChangedEvent()` helper to reduce duplication
+  - All rule-service tests pass; behavior unchanged.
+
 ## Recent Decisions
 - **Evaluator output format**: One message per client_id (not one message with all matches)
   - Enables tenant locality: messages partitioned by client_id
