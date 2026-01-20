@@ -6,18 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
 	"evaluator/internal/events"
+	kafkautil "evaluator/internal/kafka"
 	"github.com/segmentio/kafka-go"
-)
-
-const (
-	// readTimeout is the maximum time to wait for a Kafka read operation.
-	readTimeout = 10 * time.Second
-	// commitInterval is how often to commit offsets (after processing).
-	commitInterval = 1 * time.Second
 )
 
 // Consumer wraps a Kafka reader for consuming rule.changed events.
@@ -39,10 +31,7 @@ func NewConsumer(brokers string, topic string, groupID string) (*Consumer, error
 	}
 
 	// Parse comma-separated broker list
-	brokerList := strings.Split(brokers, ",")
-	for i := range brokerList {
-		brokerList[i] = strings.TrimSpace(brokerList[i])
-	}
+	brokerList := kafkautil.ParseBrokers(brokers)
 
 	slog.Info("Initializing rule.changed Kafka consumer",
 		"brokers", brokerList,
@@ -57,16 +46,16 @@ func NewConsumer(brokers string, topic string, groupID string) (*Consumer, error
 		GroupID:        groupID,
 		MinBytes:       10e3, // 10KB
 		MaxBytes:       10e6, // 10MB
-		MaxWait:        readTimeout,
-		CommitInterval: commitInterval,
+		MaxWait:        kafkautil.ReadTimeout,
+		CommitInterval: kafkautil.CommitInterval,
 		StartOffset:    kafka.FirstOffset, // Start from beginning if no committed offset
 	})
 
 	slog.Info("Rule.changed consumer configured",
 		"min_bytes", 10e3,
 		"max_bytes", 10e6,
-		"max_wait", readTimeout,
-		"commit_interval", commitInterval,
+		"max_wait", kafkautil.ReadTimeout,
+		"commit_interval", kafkautil.CommitInterval,
 	)
 
 	return &Consumer{

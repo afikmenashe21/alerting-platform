@@ -6,16 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"evaluator/internal/events"
+	kafkautil "evaluator/internal/kafka"
 	"github.com/segmentio/kafka-go"
-)
-
-const (
-	// writeTimeout is the maximum time to wait for a Kafka write operation.
-	writeTimeout = 10 * time.Second
 )
 
 // Producer wraps a Kafka writer and provides a simple interface for publishing matched alerts.
@@ -35,10 +30,7 @@ func NewProducer(brokers string, topic string) (*Producer, error) {
 	}
 
 	// Parse comma-separated broker list
-	brokerList := strings.Split(brokers, ",")
-	for i := range brokerList {
-		brokerList[i] = strings.TrimSpace(brokerList[i])
-	}
+	brokerList := kafkautil.ParseBrokers(brokers)
 
 	slog.Info("Initializing Kafka producer",
 		"brokers", brokerList,
@@ -54,13 +46,13 @@ func NewProducer(brokers string, topic string) (*Producer, error) {
 		Addr:         kafka.TCP(brokerList...),
 		Topic:        topic,
 		Balancer:     &kafka.Hash{}, // Key-based partitioning (hashes the message key)
-		WriteTimeout: writeTimeout,
+		WriteTimeout: kafkautil.WriteTimeout,
 		RequiredAcks: kafka.RequireOne, // At-least-once semantics (waits for leader ack)
 		Async:        false,            // Synchronous writes for reliability and error handling
 	}
 
 	slog.Info("Kafka producer configured",
-		"write_timeout", writeTimeout,
+		"write_timeout", kafkautil.WriteTimeout,
 		"required_acks", "RequireOne",
 		"async", false,
 		"balancer", "Hash (key-based partitioning)",
