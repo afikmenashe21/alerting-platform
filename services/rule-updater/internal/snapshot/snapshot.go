@@ -1,10 +1,6 @@
 // Package snapshot handles building and writing rule snapshots to Redis.
 package snapshot
 
-import (
-	"rule-updater/internal/database"
-)
-
 const (
 	// SnapshotKey is the Redis key where the rule snapshot is stored.
 	SnapshotKey = "rules:snapshot"
