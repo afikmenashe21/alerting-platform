@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"aggregator/internal/events"
+	kafkautil "aggregator/internal/kafka"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -40,10 +40,7 @@ func NewConsumer(brokers string, topic string, groupID string) (*Consumer, error
 	}
 
 	// Parse comma-separated broker list
-	brokerList := strings.Split(brokers, ",")
-	for i := range brokerList {
-		brokerList[i] = strings.TrimSpace(brokerList[i])
-	}
+	brokerList := kafkautil.ParseBrokers(brokers)
 
 	slog.Info("Initializing Kafka consumer",
 		"brokers", brokerList,

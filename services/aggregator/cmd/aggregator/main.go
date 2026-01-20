@@ -56,7 +56,6 @@ func main() {
 	}()
 
 	// Initialize database connection
-	slog.Info("Connecting to PostgreSQL database")
 	db, err := database.NewDB(cfg.PostgresDSN)
 	if err != nil {
 		slog.Error("Failed to connect to database", "error", err)
@@ -64,7 +63,6 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
-	slog.Info("Successfully connected to PostgreSQL database")
 
 	// Initialize Kafka consumer
 	slog.Info("Connecting to Kafka consumer", "topic", cfg.AlertsMatchedTopic)
@@ -91,7 +89,6 @@ func main() {
 	proc := processor.NewProcessor(kafkaConsumer, kafkaProducer, db)
 
 	// Main processing loop
-	slog.Info("Starting notification aggregation loop")
 	if err := proc.ProcessNotifications(ctx); err != nil {
 		slog.Error("Notification processing failed", "error", err)
 		os.Exit(1)
