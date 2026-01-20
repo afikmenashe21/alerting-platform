@@ -41,6 +41,15 @@
     - `smtp.go` (118 lines): TLS connection handling
     - `message.go` (40 lines): Email message building
   - All sender tests pass; behavior unchanged.
+- [x] evaluator: code cleanup and modularization:
+  - Extracted shared Kafka utilities to `internal/kafka/util.go`:
+    - `ValidateConsumerParams()`: Common validation for brokers, topic, groupID
+    - `ValidateProducerParams()`: Common validation for brokers, topic
+    - `NewReaderConfig()`: Standardized Kafka reader configuration
+  - Removed duplicate validation logic from `consumer`, `ruleconsumer`, and `producer` packages
+  - Added `NewAlertMatched()` helper in `internal/events/events.go` to build AlertMatched from AlertNew
+  - Simplified processor code by using helper function instead of inline struct construction
+  - All evaluator tests pass; behavior unchanged.
 
 ## Recent Decisions
 - **Evaluator output format**: One message per client_id (not one message with all matches)

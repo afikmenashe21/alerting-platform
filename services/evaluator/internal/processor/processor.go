@@ -65,17 +65,7 @@ func (p *Processor) ProcessAlerts(ctx context.Context) error {
 			if len(matches) > 0 {
 				for clientID, ruleIDs := range matches {
 					// Build matched alert event for this client
-					matched := &events.AlertMatched{
-						AlertID:       alert.AlertID,
-						SchemaVersion: alert.SchemaVersion,
-						EventTS:       alert.EventTS,
-						Severity:      alert.Severity,
-						Source:        alert.Source,
-						Name:          alert.Name,
-						Context:       alert.Context,
-						ClientID:      clientID,
-						RuleIDs:       ruleIDs,
-					}
+					matched := events.NewAlertMatched(alert, clientID, ruleIDs)
 
 					// Publish message for this client
 					if err := p.producer.Publish(ctx, matched); err != nil {

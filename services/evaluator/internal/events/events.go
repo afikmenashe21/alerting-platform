@@ -26,6 +26,21 @@ type AlertMatched struct {
 	RuleIDs       []string          `json:"rule_ids"` // All rule IDs that matched for this client
 }
 
+// NewAlertMatched creates a new AlertMatched event from an AlertNew event for a specific client.
+func NewAlertMatched(alert *AlertNew, clientID string, ruleIDs []string) *AlertMatched {
+	return &AlertMatched{
+		AlertID:       alert.AlertID,
+		SchemaVersion: alert.SchemaVersion,
+		EventTS:       alert.EventTS,
+		Severity:      alert.Severity,
+		Source:        alert.Source,
+		Name:          alert.Name,
+		Context:       alert.Context,
+		ClientID:      clientID,
+		RuleIDs:       ruleIDs,
+	}
+}
+
 // RuleChanged represents a rule change event from the rule.changed topic.
 type RuleChanged struct {
 	RuleID        string `json:"rule_id"`

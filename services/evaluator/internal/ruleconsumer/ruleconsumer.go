@@ -20,14 +20,8 @@ type Consumer struct {
 
 // NewConsumer creates a new Kafka consumer for rule.changed topic.
 func NewConsumer(brokers string, topic string, groupID string) (*Consumer, error) {
-	if brokers == "" {
-		return nil, fmt.Errorf("brokers cannot be empty")
-	}
-	if topic == "" {
-		return nil, fmt.Errorf("topic cannot be empty")
-	}
-	if groupID == "" {
-		return nil, fmt.Errorf("groupID cannot be empty")
+	if err := kafkautil.ValidateConsumerParams(brokers, topic, groupID); err != nil {
+		return nil, err
 	}
 
 	// Parse comma-separated broker list
@@ -40,16 +34,7 @@ func NewConsumer(brokers string, topic string, groupID string) (*Consumer, error
 	)
 
 	// Configure Kafka reader for at-least-once delivery
-	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:        brokerList,
-		Topic:          topic,
-		GroupID:        groupID,
-		MinBytes:       10e3, // 10KB
-		MaxBytes:       10e6, // 10MB
-		MaxWait:        kafkautil.ReadTimeout,
-		CommitInterval: kafkautil.CommitInterval,
-		StartOffset:    kafka.FirstOffset, // Start from beginning if no committed offset
-	})
+	reader := kafka.NewReader(kafkautil.NewReaderConfig(brokerList, topic, groupID))
 
 	slog.Info("Rule.changed consumer configured",
 		"min_bytes", 10e3,

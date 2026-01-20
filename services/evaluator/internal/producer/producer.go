@@ -22,11 +22,8 @@ type Producer struct {
 // NewProducer creates a new Kafka producer with the specified brokers and topic.
 // The producer is configured for at-least-once delivery semantics with synchronous writes.
 func NewProducer(brokers string, topic string) (*Producer, error) {
-	if brokers == "" {
-		return nil, fmt.Errorf("brokers cannot be empty")
-	}
-	if topic == "" {
-		return nil, fmt.Errorf("topic cannot be empty")
+	if err := kafkautil.ValidateProducerParams(brokers, topic); err != nil {
+		return nil, err
 	}
 
 	// Parse comma-separated broker list

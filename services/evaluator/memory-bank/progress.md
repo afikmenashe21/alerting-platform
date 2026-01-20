@@ -50,3 +50,17 @@ internal/
 - **Consumer**: Starts from beginning if no committed offset
 - **Processor**: Coordinates alert consumption, matching, and publishing
 - **Rule Handler**: Handles rule.changed events and triggers immediate reloads
+
+## Code Cleanup and Modularization
+- [x] **Extracted shared Kafka utilities**:
+  - `internal/kafka/util.go`: Added `ValidateConsumerParams()` and `ValidateProducerParams()` for common validation
+  - `internal/kafka/util.go`: Added `NewReaderConfig()` for standardized Kafka reader configuration
+  - Removed duplicate validation logic from `consumer` and `ruleconsumer` packages
+  - Removed duplicate validation logic from `producer` package
+- [x] **Extracted event building helper**:
+  - `internal/events/events.go`: Added `NewAlertMatched()` helper function to build AlertMatched from AlertNew
+  - Simplified processor code by removing inline struct construction
+- [x] **Code organization**:
+  - All non-test files are under 200 lines (no splitting needed)
+  - Test files remain large but are acceptable for comprehensive test coverage
+  - All tests pass; behavior unchanged
