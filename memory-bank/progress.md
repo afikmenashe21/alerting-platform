@@ -24,6 +24,16 @@
     - `clients.go`, `rules.go`, `endpoints.go`, `notifications.go`
   - Added `publishRuleChangedEvent()` helper to reduce duplication
   - All rule-service tests pass; behavior unchanged.
+- [x] rule-updater: code cleanup and modularization:
+  - Split 618-line `snapshot.go` into three focused files:
+    - `snapshot.go` (267 lines): Core Snapshot struct and in-memory operations
+    - `writer.go` (156 lines): Writer struct and Redis operations
+    - `lua_scripts.go` (207 lines): Lua script constants for direct Redis updates
+  - Extracted redundant code into helper functions:
+    - `getMaxDictValue()`: Reusable dictionary max value calculation
+    - `removeFromIndex()`: Unified index removal logic
+    - `newEmptySnapshot()`: Centralized empty snapshot creation
+  - All tests pass; behavior unchanged.
 
 ## Recent Decisions
 - **Evaluator output format**: One message per client_id (not one message with all matches)

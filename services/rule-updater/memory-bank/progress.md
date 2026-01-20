@@ -9,6 +9,16 @@
 - [x] graceful shutdown handling
 - [x] at-least-once semantics (commit offset after successful snapshot write)
 - [x] Modular architecture with processor pattern
+- [x] Code cleanup and modularization:
+  - Split 618-line `snapshot.go` into three focused files:
+    - `snapshot.go` (267 lines): Core Snapshot struct and in-memory operations
+    - `writer.go` (156 lines): Writer struct and Redis operations
+    - `lua_scripts.go` (207 lines): Lua script constants for direct Redis updates
+  - Extracted redundant code into helper functions:
+    - `getMaxDictValue()`: Reusable dictionary max value calculation
+    - `removeFromIndex()`: Unified index removal logic
+    - `newEmptySnapshot()`: Centralized empty snapshot creation
+  - All tests pass; behavior unchanged
 
 ## Architecture Decisions
 
@@ -31,6 +41,9 @@ internal/
 ├── processor/           # Processing orchestration
 │   └── processor.go     # Rule change processing logic
 ├── snapshot/            # Snapshot building and Redis operations
+│   ├── snapshot.go      # Core Snapshot struct and in-memory operations
+│   ├── writer.go        # Writer struct and Redis operations
+│   └── lua_scripts.go   # Lua script constants for direct Redis updates
 ├── database/           # Data access layer
 ├── consumer/           # Kafka consumer
 └── config/            # Configuration
