@@ -4,7 +4,6 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
-	"strings"
 )
 
 // CreateEndpointRequest represents a request to create an endpoint.
@@ -58,9 +57,7 @@ func (h *Handlers) CreateEndpoint(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	endpoint, err := h.db.CreateEndpoint(ctx, req.RuleID, req.Type, req.Value)
 	if err != nil {
-		slog.Error("Failed to create endpoint", "error", err, "rule_id", req.RuleID)
-		if strings.Contains(err.Error(), "rule not found") {
-			http.Error(w, "Rule not found", http.StatusNotFound)
+		if handleDBError(w, err, "endpoint", req.RuleID) {
 			return
 		}
 		http.Error(w, "Failed to create endpoint: "+err.Error(), http.StatusBadRequest)
@@ -84,8 +81,10 @@ func (h *Handlers) GetEndpoint(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	endpoint, err := h.db.GetEndpoint(ctx, endpointID)
 	if err != nil {
-		slog.Error("Failed to get endpoint", "error", err, "endpoint_id", endpointID)
-		http.Error(w, "Endpoint not found", http.StatusNotFound)
+		if handleDBError(w, err, "endpoint", endpointID) {
+			return
+		}
+		http.Error(w, "Failed to get endpoint: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -148,9 +147,7 @@ func (h *Handlers) UpdateEndpoint(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	endpoint, err := h.db.UpdateEndpoint(ctx, endpointID, req.Type, req.Value)
 	if err != nil {
-		slog.Error("Failed to update endpoint", "error", err, "endpoint_id", endpointID)
-		if strings.Contains(err.Error(), "not found") {
-			http.Error(w, "Endpoint not found", http.StatusNotFound)
+		if handleDBError(w, err, "endpoint", endpointID) {
 			return
 		}
 		http.Error(w, "Failed to update endpoint: "+err.Error(), http.StatusBadRequest)
@@ -179,9 +176,7 @@ func (h *Handlers) ToggleEndpointEnabled(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	endpoint, err := h.db.ToggleEndpointEnabled(ctx, endpointID, req.Enabled)
 	if err != nil {
-		slog.Error("Failed to toggle endpoint enabled", "error", err, "endpoint_id", endpointID)
-		if strings.Contains(err.Error(), "not found") {
-			http.Error(w, "Endpoint not found", http.StatusNotFound)
+		if handleDBError(w, err, "endpoint", endpointID) {
 			return
 		}
 		http.Error(w, "Failed to toggle endpoint enabled: "+err.Error(), http.StatusInternalServerError)
@@ -204,12 +199,10 @@ func (h *Handlers) DeleteEndpoint(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	if err := h.db.DeleteEndpoint(ctx, endpointID); err != nil {
-		slog.Error("Failed to delete endpoint", "error", err, "endpoint_id", endpointID)
-		if strings.Contains(err.Error(), "not found") {
-			http.Error(w, "Endpoint not found", http.StatusNotFound)
+		if handleDBError(w, err, "endpoint", endpointID) {
 			return
 		}
-		http.Error(w, "Failed to delete endpoint", http.StatusInternalServerError)
+		http.Error(w, "Failed to delete endpoint: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

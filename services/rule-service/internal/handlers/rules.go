@@ -2,13 +2,8 @@
 package handlers
 
 import (
-	"context"
-	"log/slog"
 	"net/http"
-	"strings"
-	"time"
 
-	"rule-service/internal/database"
 	"rule-service/internal/events"
 )
 
@@ -34,23 +29,6 @@ type ToggleRuleEnabledRequest struct {
 	Version int  `json:"version"` // Optimistic locking version
 }
 
-// publishRuleChangedEvent publishes a rule.changed event after a successful DB operation.
-// It logs errors but does not fail the operation if publishing fails.
-func (h *Handlers) publishRuleChangedEvent(ctx context.Context, rule *database.Rule, action string) {
-	changed := &events.RuleChanged{
-		RuleID:        rule.RuleID,
-		ClientID:      rule.ClientID,
-		Action:        action,
-		Version:       rule.Version,
-		UpdatedAt:     rule.UpdatedAt.Unix(),
-		SchemaVersion: SchemaVersion,
-	}
-	if err := h.producer.Publish(ctx, changed); err != nil {
-		slog.Error("Failed to publish rule.changed event", "error", err, "rule_id", rule.RuleID)
-		// Continue - the rule operation succeeded, event publishing failure can be handled separately
-	}
-}
-
 // CreateRule creates a new rule and publishes a rule.changed event.
 func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
@@ -66,37 +44,19 @@ func (h *Handlers) CreateRule(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "client_id is required", http.StatusBadRequest)
 		return
 	}
-	if req.Severity == "" {
-		http.Error(w, "severity is required", http.StatusBadRequest)
-		return
-	}
-	if req.Source == "" {
-		http.Error(w, "source is required", http.StatusBadRequest)
-		return
-	}
-	if req.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+
+	if !validateRuleFields(w, req.Severity, req.Source, req.Name) {
 		return
 	}
 
-	// Validate severity enum (allow "*" as wildcard)
-	if !isValidSeverity(req.Severity) {
-		http.Error(w, "severity must be one of: LOW, MEDIUM, HIGH, CRITICAL, or * (wildcard)", http.StatusBadRequest)
-		return
-	}
-
-	// Validate that not all fields are wildcards
-	if isAllWildcards(req.Severity, req.Source, req.Name) {
-		http.Error(w, "cannot create rule with all fields as wildcards (*)", http.StatusBadRequest)
+	if !validateRuleValues(w, req.Severity, req.Source, req.Name) {
 		return
 	}
 
 	ctx := r.Context()
 	rule, err := h.db.CreateRule(ctx, req.ClientID, req.Severity, req.Source, req.Name)
 	if err != nil {
-		slog.Error("Failed to create rule", "error", err, "client_id", req.ClientID)
-		if err.Error() == "client not found: "+req.ClientID {
-			http.Error(w, "Client not found", http.StatusNotFound)
+		if handleDBError(w, err, "rule", req.ClientID) {
 			return
 		}
 		http.Error(w, "Failed to create rule: "+err.Error(), http.StatusBadRequest)
@@ -122,8 +82,10 @@ func (h *Handlers) GetRule(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	rule, err := h.db.GetRule(ctx, ruleID)
 	if err != nil {
-		slog.Error("Failed to get rule", "error", err, "rule_id", ruleID)
-		http.Error(w, "Rule not found", http.StatusNotFound)
+		if handleDBError(w, err, "rule", ruleID) {
+			return
+		}
+		http.Error(w, "Failed to get rule: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -145,8 +107,10 @@ func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	rules, err := h.db.ListRules(ctx, clientIDPtr)
 	if err != nil {
-		slog.Error("Failed to list rules", "error", err)
-		http.Error(w, "Failed to list rules", http.StatusInternalServerError)
+		if handleDBError(w, err, "rule", "") {
+			return
+		}
+		http.Error(w, "Failed to list rules: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -169,41 +133,18 @@ func (h *Handlers) UpdateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Severity == "" {
-		http.Error(w, "severity is required", http.StatusBadRequest)
-		return
-	}
-	if req.Source == "" {
-		http.Error(w, "source is required", http.StatusBadRequest)
-		return
-	}
-	if req.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+	if !validateRuleFields(w, req.Severity, req.Source, req.Name) {
 		return
 	}
 
-	// Validate severity enum (allow "*" as wildcard)
-	if !isValidSeverity(req.Severity) {
-		http.Error(w, "severity must be one of: LOW, MEDIUM, HIGH, CRITICAL, or * (wildcard)", http.StatusBadRequest)
-		return
-	}
-
-	// Validate that not all fields are wildcards
-	if isAllWildcards(req.Severity, req.Source, req.Name) {
-		http.Error(w, "cannot create rule with all fields as wildcards (*)", http.StatusBadRequest)
+	if !validateRuleValues(w, req.Severity, req.Source, req.Name) {
 		return
 	}
 
 	ctx := r.Context()
 	rule, err := h.db.UpdateRule(ctx, ruleID, req.Severity, req.Source, req.Name, req.Version)
 	if err != nil {
-		slog.Error("Failed to update rule", "error", err, "rule_id", ruleID)
-		if err.Error() == "rule not found: "+ruleID {
-			http.Error(w, "Rule not found", http.StatusNotFound)
-			return
-		}
-		if strings.Contains(err.Error(), "version mismatch") {
-			http.Error(w, err.Error(), http.StatusConflict)
+		if handleDBError(w, err, "rule", ruleID) {
 			return
 		}
 		http.Error(w, "Failed to update rule: "+err.Error(), http.StatusBadRequest)
@@ -234,13 +175,7 @@ func (h *Handlers) ToggleRuleEnabled(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	rule, err := h.db.ToggleRuleEnabled(ctx, ruleID, req.Enabled, req.Version)
 	if err != nil {
-		slog.Error("Failed to toggle rule enabled", "error", err, "rule_id", ruleID)
-		if err.Error() == "rule not found: "+ruleID {
-			http.Error(w, "Rule not found", http.StatusNotFound)
-			return
-		}
-		if strings.Contains(err.Error(), "version mismatch") {
-			http.Error(w, err.Error(), http.StatusConflict)
+		if handleDBError(w, err, "rule", ruleID) {
 			return
 		}
 		http.Error(w, "Failed to toggle rule enabled: "+err.Error(), http.StatusInternalServerError)
@@ -273,32 +208,24 @@ func (h *Handlers) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	// Get rule before deletion to publish event
 	rule, err := h.db.GetRule(ctx, ruleID)
 	if err != nil {
-		slog.Error("Failed to get rule for deletion", "error", err, "rule_id", ruleID)
-		http.Error(w, "Rule not found", http.StatusNotFound)
+		if handleDBError(w, err, "rule", ruleID) {
+			return
+		}
+		http.Error(w, "Failed to get rule for deletion: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Delete the rule
 	if err := h.db.DeleteRule(ctx, ruleID); err != nil {
-		slog.Error("Failed to delete rule", "error", err, "rule_id", ruleID)
-		http.Error(w, "Failed to delete rule", http.StatusInternalServerError)
+		if handleDBError(w, err, "rule", ruleID) {
+			return
+		}
+		http.Error(w, "Failed to delete rule: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Publish rule.changed event after successful DB commit
-	// Use current time since rule.UpdatedAt may be stale after deletion
-	changed := &events.RuleChanged{
-		RuleID:        rule.RuleID,
-		ClientID:      rule.ClientID,
-		Action:        events.ActionDeleted,
-		Version:       rule.Version,
-		UpdatedAt:     time.Now().Unix(),
-		SchemaVersion: SchemaVersion,
-	}
-	if err := h.producer.Publish(ctx, changed); err != nil {
-		slog.Error("Failed to publish rule.changed event", "error", err, "rule_id", ruleID)
-		// Continue - the rule was deleted, event publishing failure can be handled separately
-	}
+	h.publishRuleDeletedEvent(ctx, rule)
 
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -47,6 +47,14 @@
     - `producer.go` - Producer struct and main operations
     - `topic.go` - Topic creation logic
   - All tests pass; behavior unchanged.
+- [x] Additional code cleanup and modularization:
+  - Extracted common error handling patterns:
+    - `internal/handlers/errors.go`: `handleDBError()` helper for consistent database error handling across all handlers
+    - `validateRuleFields()` and `validateRuleValues()` helpers for rule validation
+    - Removed ~50+ lines of duplicate error handling code across clients, rules, and endpoints handlers
+  - Split large files by concern:
+    - `rules.go` (304 lines) → split into rules.go (handlers) and rules_events.go (event publishing helpers)
+  - All tests pass; behavior unchanged.
 
 ## Architecture Decisions
 

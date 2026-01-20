@@ -78,6 +78,24 @@
     - `handlers.go` (324 lines) → split into 5 files: types.go, generate.go, job_handlers.go, health.go, helpers.go
     - `producer.go` (288 lines) → split into producer.go and topic.go
   - All alert-producer tests pass; behavior unchanged.
+- [x] rule-service: additional code cleanup and modularization:
+  - Extracted common error handling patterns:
+    - `internal/handlers/errors.go`: `handleDBError()` helper for consistent database error handling
+    - `validateRuleFields()` and `validateRuleValues()` helpers for rule validation
+    - Removed duplicate error handling code across all handlers (clients, rules, endpoints)
+  - Split large files by concern:
+    - `rules.go` (304 lines) → split into rules.go (handlers) and rules_events.go (event publishing helpers)
+  - All rule-service tests pass; behavior unchanged.
+- [x] sender: additional code cleanup and modularization:
+  - Split large files by resource/concern:
+    - `cmd/sender/main.go` (209 lines) → split into main.go (initialization) and processor.go (processing loop)
+    - `internal/database/database.go` (220 lines) → split into database.go (connection), notifications.go (notification operations), and endpoints.go (endpoint operations)
+  - All sender tests pass; behavior unchanged.
+- [x] rule-updater: additional code cleanup and modularization:
+  - Split large files by concern:
+    - `internal/snapshot/snapshot.go` (267 lines) → split into snapshot.go (types and helpers), builder.go (BuildSnapshot), and operations.go (AddRule, UpdateRule, RemoveRule)
+    - Extracted helper functions: `addToIndex()`, `addToDictionaries()`, `addToIndexes()` to reduce duplication
+  - All rule-updater tests pass; behavior unchanged.
 
 ## Recent Decisions
 - **Evaluator output format**: One message per client_id (not one message with all matches)

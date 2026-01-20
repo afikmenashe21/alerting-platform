@@ -94,6 +94,13 @@ internal/sender/
 - All files now under 300 lines, organized by concern
 - Maintained all existing functionality and test coverage
 
+## Additional Code Cleanup and Modularization
+- [x] Split large files by resource/concern:
+  - `cmd/sender/main.go` (209 lines) → split into main.go (initialization) and processor.go (processing loop)
+  - `internal/database/database.go` (220 lines) → split into database.go (connection management), notifications.go (notification operations), and endpoints.go (endpoint operations)
+  - Improved separation of concerns: connection management, notification operations, and endpoint operations
+  - All tests pass; behavior unchanged
+
 ## Future Enhancements
 - Retry logic with exponential backoff for failed sends
 - Rate limiting per client/endpoint

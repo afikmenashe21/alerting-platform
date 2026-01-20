@@ -19,6 +19,16 @@
     - `removeFromIndex()`: Unified index removal logic
     - `newEmptySnapshot()`: Centralized empty snapshot creation
   - All tests pass; behavior unchanged
+- [x] Additional code cleanup and modularization:
+  - Split `snapshot.go` (267 lines) into focused files:
+    - `snapshot.go`: Types, constants, and helper functions (getMaxDictValue, removeFromIndex, removeFromSlice, newEmptySnapshot)
+    - `builder.go`: BuildSnapshot function for initial snapshot construction
+    - `operations.go`: Snapshot operations (AddRule, UpdateRule, RemoveRule) and helper methods (findRuleInt, getNextRuleInt, addToIndex, addToDictionaries, addToIndexes)
+  - Extracted additional helper functions to reduce duplication:
+    - `addToIndex()`: Helper for adding ruleInt to index maps
+    - `addToDictionaries()`: Helper for adding values to dictionaries
+    - `addToIndexes()`: Helper for adding ruleInt to all inverted indexes
+  - All tests pass; behavior unchanged
 
 ## Architecture Decisions
 

@@ -4,7 +4,6 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
-	"strings"
 )
 
 // CreateClientRequest represents a request to create a client.
@@ -35,9 +34,7 @@ func (h *Handlers) CreateClient(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	if err := h.db.CreateClient(ctx, req.ClientID, req.Name); err != nil {
-		slog.Error("Failed to create client", "error", err, "client_id", req.ClientID)
-		if strings.Contains(err.Error(), "already exists") {
-			http.Error(w, "Client already exists", http.StatusConflict)
+		if handleDBError(w, err, "client", req.ClientID) {
 			return
 		}
 		http.Error(w, "Failed to create client: "+err.Error(), http.StatusInternalServerError)
@@ -68,8 +65,10 @@ func (h *Handlers) GetClient(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	client, err := h.db.GetClient(ctx, clientID)
 	if err != nil {
-		slog.Error("Failed to get client", "error", err, "client_id", clientID)
-		http.Error(w, "Client not found", http.StatusNotFound)
+		if handleDBError(w, err, "client", clientID) {
+			return
+		}
+		http.Error(w, "Failed to get client: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
