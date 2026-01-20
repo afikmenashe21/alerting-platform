@@ -14,11 +14,6 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-const (
-	// writeTimeout is the maximum time to wait for a Kafka write operation.
-	writeTimeout = 10 * time.Second
-)
-
 // Producer wraps a Kafka writer and provides a simple interface for publishing notification ready events.
 type Producer struct {
 	writer *kafka.Writer
@@ -28,11 +23,8 @@ type Producer struct {
 // NewProducer creates a new Kafka producer with the specified brokers and topic.
 // The producer is configured for at-least-once delivery semantics with synchronous writes.
 func NewProducer(brokers string, topic string) (*Producer, error) {
-	if brokers == "" {
-		return nil, fmt.Errorf("brokers cannot be empty")
-	}
-	if topic == "" {
-		return nil, fmt.Errorf("topic cannot be empty")
+	if err := kafkautil.ValidateProducerParams(brokers, topic); err != nil {
+		return nil, err
 	}
 
 	// Parse comma-separated broker list
@@ -49,13 +41,13 @@ func NewProducer(brokers string, topic string) (*Producer, error) {
 		Addr:         kafka.TCP(brokerList...),
 		Topic:        topic,
 		Balancer:     &kafka.Hash{}, // Key-based partitioning (hashes the message key)
-		WriteTimeout: writeTimeout,
+		WriteTimeout: kafkautil.WriteTimeout,
 		RequiredAcks: kafka.RequireOne, // At-least-once semantics (waits for leader ack)
 		Async:        false,            // Synchronous writes for reliability and error handling
 	}
 
 	slog.Info("Kafka producer configured",
-		"write_timeout", writeTimeout,
+		"write_timeout", kafkautil.WriteTimeout,
 		"required_acks", "RequireOne",
 		"async", false,
 		"balancer", "Hash (key-based partitioning)",
@@ -68,19 +60,13 @@ func NewProducer(brokers string, topic string) (*Producer, error) {
 	}, nil
 }
 
-// Publish serializes a notification ready event to JSON and publishes it to Kafka.
+// buildMessage creates a Kafka message from a NotificationReady event.
 // The message is keyed by client_id for partition distribution (tenant locality).
-// Returns an error if serialization or publishing fails.
-func (p *Producer) Publish(ctx context.Context, ready *events.NotificationReady) error {
+func buildMessage(ready *events.NotificationReady) (kafka.Message, error) {
 	// Serialize notification ready event to JSON
 	payload, err := json.Marshal(ready)
 	if err != nil {
-		slog.Error("Failed to marshal notification ready event to JSON",
-			"notification_id", ready.NotificationID,
-			"client_id", ready.ClientID,
-			"error", err,
-		)
-		return fmt.Errorf("failed to marshal notification ready event: %w", err)
+		return kafka.Message{}, fmt.Errorf("failed to marshal notification ready event: %w", err)
 	}
 
 	// Partition key: use client_id for tenant locality
@@ -101,6 +87,24 @@ func (p *Producer) Publish(ctx context.Context, ready *events.NotificationReady)
 			},
 		},
 		Time: time.Now(),
+	}
+
+	return msg, nil
+}
+
+// Publish serializes a notification ready event to JSON and publishes it to Kafka.
+// The message is keyed by client_id for partition distribution (tenant locality).
+// Returns an error if serialization or publishing fails.
+func (p *Producer) Publish(ctx context.Context, ready *events.NotificationReady) error {
+	// Build Kafka message
+	msg, err := buildMessage(ready)
+	if err != nil {
+		slog.Error("Failed to build notification ready message",
+			"notification_id", ready.NotificationID,
+			"client_id", ready.ClientID,
+			"error", err,
+		)
+		return err
 	}
 
 	// Write to Kafka (synchronous, waits for ack)

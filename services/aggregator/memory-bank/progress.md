@@ -5,6 +5,15 @@
 - [x] produce notifications.ready
 - [x] correct offset commit ordering
 - [x] Modular architecture with processor pattern
+- [x] Code cleanup and modularization:
+  - Extracted shared Kafka validation helpers (`ValidateConsumerParams`, `ValidateProducerParams`)
+  - Extracted Kafka constants (`ReadTimeout`, `CommitInterval`, `WriteTimeout`)
+  - Extracted `NewReaderConfig` helper for standardized Kafka reader configuration
+  - Extracted `buildMessage` helper from producer for message construction
+  - Extracted `marshalContextToJSONB` helper from database for JSON marshaling
+  - Added `NewNotificationReady` helper function for event building
+  - Removed duplicate validation logic from consumer and producer
+  - All tests pass; behavior unchanged
 
 ## Architecture Decisions
 
@@ -29,6 +38,8 @@ internal/
 ├── database/           # Data access layer
 ├── consumer/          # Kafka consumer
 ├── producer/           # Kafka producer
+├── events/            # Event structures and builders
+├── kafka/             # Shared Kafka utilities and validation
 └── config/            # Configuration
 ```
 
@@ -40,3 +51,11 @@ internal/
 - Offset commit only after successful DB operation and (if applicable) publish
 - Uses `pq.Array` for proper PostgreSQL array handling
 - Processor coordinates between consumer, database, and producer
+- Shared Kafka utilities in `internal/kafka` package:
+  - `ValidateConsumerParams`, `ValidateProducerParams`: Common validation
+  - `ParseBrokers`: Broker list parsing
+  - `NewReaderConfig`: Standardized reader configuration
+  - Constants: `ReadTimeout`, `CommitInterval`, `WriteTimeout`
+- Event builders: `NewNotificationReady` helper for constructing events
+- Message building: `buildMessage` helper extracts message construction logic
+- JSON marshaling: `marshalContextToJSONB` helper for database context serialization

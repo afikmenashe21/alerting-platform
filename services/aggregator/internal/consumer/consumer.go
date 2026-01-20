@@ -6,18 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"aggregator/internal/events"
 	kafkautil "aggregator/internal/kafka"
 	"github.com/segmentio/kafka-go"
-)
-
-const (
-	// readTimeout is the maximum time to wait for a Kafka read operation.
-	readTimeout = 10 * time.Second
-	// commitInterval is how often to commit offsets (after processing).
-	commitInterval = 1 * time.Second
 )
 
 // Consumer wraps a Kafka reader and provides a simple interface for consuming matched alerts.
@@ -29,14 +21,8 @@ type Consumer struct {
 // NewConsumer creates a new Kafka consumer with the specified brokers, topic, and group ID.
 // The consumer is configured for at-least-once delivery semantics.
 func NewConsumer(brokers string, topic string, groupID string) (*Consumer, error) {
-	if brokers == "" {
-		return nil, fmt.Errorf("brokers cannot be empty")
-	}
-	if topic == "" {
-		return nil, fmt.Errorf("topic cannot be empty")
-	}
-	if groupID == "" {
-		return nil, fmt.Errorf("groupID cannot be empty")
+	if err := kafkautil.ValidateConsumerParams(brokers, topic, groupID); err != nil {
+		return nil, err
 	}
 
 	// Parse comma-separated broker list
@@ -51,22 +37,13 @@ func NewConsumer(brokers string, topic string, groupID string) (*Consumer, error
 	// Configure Kafka reader for at-least-once delivery
 	// StartOffset only applies when no committed offset exists for the consumer group
 	// Using FirstOffset ensures we read all messages when starting fresh
-	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:        brokerList,
-		Topic:          topic,
-		GroupID:        groupID,
-		MinBytes:       10e3, // 10KB
-		MaxBytes:       10e6, // 10MB
-		MaxWait:        readTimeout,
-		CommitInterval: commitInterval,
-		StartOffset:    kafka.FirstOffset, // Start from beginning if no committed offset
-	})
+	reader := kafka.NewReader(kafkautil.NewReaderConfig(brokerList, topic, groupID))
 
 	slog.Info("Kafka consumer configured",
 		"min_bytes", 10e3,
 		"max_bytes", 10e6,
-		"max_wait", readTimeout,
-		"commit_interval", commitInterval,
+		"max_wait", kafkautil.ReadTimeout,
+		"commit_interval", kafkautil.CommitInterval,
 	)
 
 	return &Consumer{

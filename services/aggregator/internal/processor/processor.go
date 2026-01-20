@@ -82,12 +82,7 @@ func (p *Processor) ProcessNotifications(ctx context.Context) error {
 			// Only emit notification ready if a new notification was created
 			if notificationID != nil {
 				// Build notification ready event
-				ready := &events.NotificationReady{
-					NotificationID: *notificationID,
-					ClientID:       matched.ClientID,
-					AlertID:        matched.AlertID,
-					SchemaVersion:  matched.SchemaVersion,
-				}
+				ready := events.NewNotificationReady(matched, *notificationID)
 
 				// Publish notification ready event
 				if err := p.producer.Publish(ctx, ready); err != nil {

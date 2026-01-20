@@ -23,3 +23,13 @@ type NotificationReady struct {
 	AlertID        string `json:"alert_id"`
 	SchemaVersion  int    `json:"schema_version"`
 }
+
+// NewNotificationReady creates a new NotificationReady event from an AlertMatched event and notification ID.
+func NewNotificationReady(matched *AlertMatched, notificationID string) *NotificationReady {
+	return &NotificationReady{
+		NotificationID: notificationID,
+		ClientID:       matched.ClientID,
+		AlertID:        matched.AlertID,
+		SchemaVersion:  matched.SchemaVersion,
+	}
+}

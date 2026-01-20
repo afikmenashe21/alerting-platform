@@ -61,17 +61,14 @@ func (db *DB) Close() error {
 	return nil
 }
 
-// InsertNotificationIdempotent inserts a notification with idempotency protection.
-// Uses INSERT ... ON CONFLICT DO NOTHING RETURNING to ensure no duplicates.
-// Returns the notification_id if a new row was inserted, or nil if it already existed.
-func (db *DB) InsertNotificationIdempotent(ctx context.Context, clientID, alertID, severity, source, name string, context map[string]string, ruleIDs []string) (*string, error) {
-	// Serialize context map to JSONB
-	// Use sql.NullString to properly handle NULL values for JSONB
+// marshalContextToJSONB serializes a context map to a sql.NullString for JSONB storage.
+// Returns a NullString with Valid=false if context is nil or empty (NULL in database).
+func marshalContextToJSONB(context map[string]string) (sql.NullString, error) {
 	var contextJSON sql.NullString
 	if context != nil && len(context) > 0 {
 		jsonBytes, err := json.Marshal(context)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal context: %w", err)
+			return sql.NullString{}, fmt.Errorf("failed to marshal context: %w", err)
 		}
 		contextJSON = sql.NullString{
 			String: string(jsonBytes),
@@ -79,6 +76,18 @@ func (db *DB) InsertNotificationIdempotent(ctx context.Context, clientID, alertI
 		}
 	}
 	// If context is nil or empty, contextJSON.Valid is false (NULL in database)
+	return contextJSON, nil
+}
+
+// InsertNotificationIdempotent inserts a notification with idempotency protection.
+// Uses INSERT ... ON CONFLICT DO NOTHING RETURNING to ensure no duplicates.
+// Returns the notification_id if a new row was inserted, or nil if it already existed.
+func (db *DB) InsertNotificationIdempotent(ctx context.Context, clientID, alertID, severity, source, name string, context map[string]string, ruleIDs []string) (*string, error) {
+	// Serialize context map to JSONB
+	contextJSON, err := marshalContextToJSONB(context)
+	if err != nil {
+		return nil, err
+	}
 
 	// Use pq.Array to properly handle PostgreSQL array type
 	// This ensures proper escaping and formatting
@@ -90,7 +99,7 @@ func (db *DB) InsertNotificationIdempotent(ctx context.Context, clientID, alertI
 	`
 
 	var notificationID string
-	err := db.conn.QueryRowContext(ctx, query,
+	err = db.conn.QueryRowContext(ctx, query,
 		clientID,
 		alertID,
 		severity,

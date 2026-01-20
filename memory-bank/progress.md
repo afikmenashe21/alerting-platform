@@ -50,6 +50,18 @@
   - Added `NewAlertMatched()` helper in `internal/events/events.go` to build AlertMatched from AlertNew
   - Simplified processor code by using helper function instead of inline struct construction
   - All evaluator tests pass; behavior unchanged.
+- [x] aggregator: code cleanup and modularization:
+  - Extracted shared Kafka utilities to `internal/kafka/kafka.go`:
+    - `ValidateConsumerParams()`: Common validation for brokers, topic, groupID
+    - `ValidateProducerParams()`: Common validation for brokers, topic
+    - `NewReaderConfig()`: Standardized Kafka reader configuration
+    - Constants: `ReadTimeout`, `CommitInterval`, `WriteTimeout`
+  - Removed duplicate validation logic from `consumer` and `producer` packages
+  - Extracted `buildMessage()` helper from producer for message construction
+  - Extracted `marshalContextToJSONB()` helper from database for JSON marshaling
+  - Added `NewNotificationReady()` helper in `internal/events/events.go` to build NotificationReady from AlertMatched
+  - Simplified processor code by using helper function instead of inline struct construction
+  - All aggregator tests pass; behavior unchanged.
 
 ## Recent Decisions
 - **Evaluator output format**: One message per client_id (not one message with all matches)
