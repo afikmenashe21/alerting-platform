@@ -12,9 +12,9 @@ PKG_PROTO_DIR="$REPO_ROOT/pkg/proto"
 echo "🔍 Verifying generated protobuf code is up-to-date..."
 echo ""
 
-# Check if protoc is available
-if ! command -v protoc &> /dev/null; then
-    echo "❌ protoc not found. Install it first: brew install protobuf"
+# Check if buf is available
+if ! command -v buf &> /dev/null; then
+    echo "❌ buf not found. Install it first: brew install bufbuild/buf/buf"
     exit 1
 fi
 
@@ -27,18 +27,36 @@ fi
 
 # Create temporary directory for fresh generation
 TMP_DIR=$(mktemp -d)
+TMP_PKG_DIR="$TMP_DIR/pkg/proto"
 trap "rm -rf $TMP_DIR" EXIT
 
+# Create temporary buf.gen.yaml with output to temp directory
+TMP_BUF_GEN="$TMP_DIR/buf.gen.yaml"
+cat > "$TMP_BUF_GEN" << EOF
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: $TMP_PKG_DIR
+    opt:
+      - module=github.com/afikmenashe/alerting-platform/pkg/proto
+      - paths=import
+inputs:
+  - directory: .
+EOF
+
 echo "1️⃣  Generating fresh protobuf code in temporary directory..."
-protoc \
-    --go_out="$TMP_DIR" \
-    --go_opt=module=github.com/afikmenashe/alerting-platform/pkg/proto \
-    --go_opt=paths=import \
-    -I"$PROTO_DIR" \
-    "$PROTO_DIR"/common.proto \
-    "$PROTO_DIR"/alerts.proto \
-    "$PROTO_DIR"/rules.proto \
-    "$PROTO_DIR"/notifications.proto
+# Use buf generate with temporary config (same settings as proto-generate target)
+cd "$PROTO_DIR"
+buf generate --template "$TMP_BUF_GEN" || {
+    echo "❌ buf generate failed"
+    exit 1
+}
+
+# Debug: Check what was generated
+if [ ! -d "$TMP_PKG_DIR" ]; then
+    echo "❌ Output directory not created: $TMP_PKG_DIR"
+    exit 1
+fi
 
 echo ""
 echo "2️⃣  Comparing with existing generated code..."
@@ -49,7 +67,7 @@ FILES_CHECKED=0
 
 for proto_type in alerts common notifications rules; do
     EXISTING_FILE="$PKG_PROTO_DIR/$proto_type/$proto_type.pb.go"
-    GENERATED_FILE="$TMP_DIR/$proto_type/$proto_type.pb.go"
+    GENERATED_FILE="$TMP_PKG_DIR/$proto_type/$proto_type.pb.go"
     
     if [ ! -f "$EXISTING_FILE" ]; then
         echo "❌ Missing generated file: $EXISTING_FILE"
