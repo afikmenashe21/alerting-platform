@@ -170,6 +170,13 @@
     - Verification script to ensure generated code stays current
     - GitHub Actions workflow for CI validation
     - Pre-commit hooks for local validation
+    - CI Fix (2026-01-21): Improved buf detection in Makefile to work with GitHub Actions buf-action by using `which` instead of `command -v`
+  - Severity enum alignment (2026-01-21):
+    - Fixed severity type mismatch between protobuf enums and database strings
+    - Changed protobuf enum values to match database format directly: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` (removed `SEVERITY_` prefix)
+    - In Go: `pbcommon.Severity_LOW`, `.String()` returns `"LOW"` - direct match with database
+    - Simpler code: no conversion helpers needed, single source of truth
+    - This ensures rule matching works correctly (was causing "No rules matched alert" errors)
   - Comprehensive documentation:
     - Strategy: `docs/architecture/PROTOBUF_INTEGRATION_STRATEGY.md`
     - Tooling: `docs/architecture/PROTOBUF_TOOLING.md`

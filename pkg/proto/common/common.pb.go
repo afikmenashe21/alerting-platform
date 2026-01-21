@@ -22,31 +22,32 @@ const (
 )
 
 // Severity levels for alerts
+// Values match database enum (LOW, MEDIUM, HIGH, CRITICAL)
 type Severity int32
 
 const (
-	Severity_SEVERITY_UNSPECIFIED Severity = 0
-	Severity_SEVERITY_LOW         Severity = 1
-	Severity_SEVERITY_MEDIUM      Severity = 2
-	Severity_SEVERITY_HIGH        Severity = 3
-	Severity_SEVERITY_CRITICAL    Severity = 4
+	Severity_UNSPECIFIED Severity = 0
+	Severity_LOW         Severity = 1
+	Severity_MEDIUM      Severity = 2
+	Severity_HIGH        Severity = 3
+	Severity_CRITICAL    Severity = 4
 )
 
 // Enum value maps for Severity.
 var (
 	Severity_name = map[int32]string{
-		0: "SEVERITY_UNSPECIFIED",
-		1: "SEVERITY_LOW",
-		2: "SEVERITY_MEDIUM",
-		3: "SEVERITY_HIGH",
-		4: "SEVERITY_CRITICAL",
+		0: "UNSPECIFIED",
+		1: "LOW",
+		2: "MEDIUM",
+		3: "HIGH",
+		4: "CRITICAL",
 	}
 	Severity_value = map[string]int32{
-		"SEVERITY_UNSPECIFIED": 0,
-		"SEVERITY_LOW":         1,
-		"SEVERITY_MEDIUM":      2,
-		"SEVERITY_HIGH":        3,
-		"SEVERITY_CRITICAL":    4,
+		"UNSPECIFIED": 0,
+		"LOW":         1,
+		"MEDIUM":      2,
+		"HIGH":        3,
+		"CRITICAL":    4,
 	}
 )
 
@@ -137,13 +138,14 @@ var File_common_proto protoreflect.FileDescriptor
 
 const file_common_proto_rawDesc = "" +
 	"\n" +
-	"\fcommon.proto\x12\x0falerting.common*u\n" +
-	"\bSeverity\x12\x18\n" +
-	"\x14SEVERITY_UNSPECIFIED\x10\x00\x12\x10\n" +
-	"\fSEVERITY_LOW\x10\x01\x12\x13\n" +
-	"\x0fSEVERITY_MEDIUM\x10\x02\x12\x11\n" +
-	"\rSEVERITY_HIGH\x10\x03\x12\x15\n" +
-	"\x11SEVERITY_CRITICAL\x10\x04*\x8e\x01\n" +
+	"\fcommon.proto\x12\x0falerting.common*H\n" +
+	"\bSeverity\x12\x0f\n" +
+	"\vUNSPECIFIED\x10\x00\x12\a\n" +
+	"\x03LOW\x10\x01\x12\n" +
+	"\n" +
+	"\x06MEDIUM\x10\x02\x12\b\n" +
+	"\x04HIGH\x10\x03\x12\f\n" +
+	"\bCRITICAL\x10\x04*\x8e\x01\n" +
 	"\n" +
 	"RuleAction\x12\x1b\n" +
 	"\x17RULE_ACTION_UNSPECIFIED\x10\x00\x12\x17\n" +

@@ -5,12 +5,13 @@ package alerting.common;
 option go_package = "github.com/afikmenashe/alerting-platform/pkg/proto/common";
 
 // Severity levels for alerts
+// Values match database enum (LOW, MEDIUM, HIGH, CRITICAL)
 enum Severity {
-  SEVERITY_UNSPECIFIED = 0;
-  SEVERITY_LOW = 1;
-  SEVERITY_MEDIUM = 2;
-  SEVERITY_HIGH = 3;
-  SEVERITY_CRITICAL = 4;
+  UNSPECIFIED = 0;
+  LOW = 1;
+  MEDIUM = 2;
+  HIGH = 3;
+  CRITICAL = 4;
 }
 
 // Rule change actions

@@ -84,16 +84,16 @@ func New(brokers string, topic string) (*Producer, error) {
 // The message is keyed by alert_id for even partition distribution.
 // Returns an error if serialization or publishing fails.
 func (p *Producer) Publish(ctx context.Context, alert *generator.Alert) error {
-	sev := pbcommon.Severity_SEVERITY_UNSPECIFIED
+	sev := pbcommon.Severity_UNSPECIFIED
 	switch strings.ToUpper(alert.Severity) {
 	case "LOW":
-		sev = pbcommon.Severity_SEVERITY_LOW
+		sev = pbcommon.Severity_LOW
 	case "MEDIUM":
-		sev = pbcommon.Severity_SEVERITY_MEDIUM
+		sev = pbcommon.Severity_MEDIUM
 	case "HIGH":
-		sev = pbcommon.Severity_SEVERITY_HIGH
+		sev = pbcommon.Severity_HIGH
 	case "CRITICAL":
-		sev = pbcommon.Severity_SEVERITY_CRITICAL
+		sev = pbcommon.Severity_CRITICAL
 	}
 
 	pb := &pbalerts.AlertNew{
