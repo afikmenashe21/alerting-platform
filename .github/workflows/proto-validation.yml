@@ -50,6 +50,11 @@ jobs:
         with:
           setup_only: true
       
+      - name: Verify buf installation
+        run: |
+          which buf || echo "buf not in PATH"
+          buf --version
+      
       - name: Validate proto files
         run: make proto-validate
       

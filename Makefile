@@ -204,21 +204,14 @@ proto-install-deps:
 # Lint proto files using buf (optional, requires buf)
 proto-lint:
 	@echo "Linting proto files with buf..."
-	@if ! command -v buf &> /dev/null; then \
-		echo "❌ buf not found. Install it first: brew install bufbuild/buf/buf"; \
-		echo "   or see: https://buf.build/docs/installation"; \
-		exit 1; \
-	fi
+	@which buf > /dev/null 2>&1 || (echo "❌ buf not found. Install it first: brew install bufbuild/buf/buf" && echo "   or see: https://buf.build/docs/installation" && exit 1)
 	@cd $(PROTO_DIR) && buf lint
 	@echo "✅ Proto files linted successfully"
 
 # Check for breaking changes against main branch (requires buf and git)
 proto-breaking:
 	@echo "Checking for breaking changes in proto files..."
-	@if ! command -v buf &> /dev/null; then \
-		echo "❌ buf not found. Install it first: brew install bufbuild/buf/buf"; \
-		exit 1; \
-	fi
+	@which buf > /dev/null 2>&1 || (echo "❌ buf not found. Install it first: brew install bufbuild/buf/buf" && exit 1)
 	@cd $(PROTO_DIR) && buf breaking --against '.git#branch=main'
 	@echo "✅ No breaking changes detected"
 
