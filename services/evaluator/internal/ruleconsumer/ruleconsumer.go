@@ -3,13 +3,14 @@ package ruleconsumer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
+	protorules "github.com/afikmenashe/alerting-platform/pkg/proto/rules"
 	"evaluator/internal/events"
 	kafkautil "evaluator/internal/kafka"
 	"github.com/segmentio/kafka-go"
+	"google.golang.org/protobuf/proto"
 )
 
 // Consumer wraps a Kafka reader for consuming rule.changed events.
@@ -56,12 +57,19 @@ func (c *Consumer) ReadMessage(ctx context.Context) (*events.RuleChanged, error)
 		return nil, fmt.Errorf("failed to read message from Kafka: %w", err)
 	}
 
-	var ruleChanged events.RuleChanged
-	if err := json.Unmarshal(msg.Value, &ruleChanged); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal rule changed event: %w", err)
+	var pb protorules.RuleChanged
+	if err := proto.Unmarshal(msg.Value, &pb); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal protobuf rule changed event: %w", err)
 	}
 
-	return &ruleChanged, nil
+	return &events.RuleChanged{
+		RuleID:        pb.RuleId,
+		ClientID:      pb.ClientId,
+		Action:        pb.Action.String(), // existing code expects string
+		Version:       int(pb.Version),
+		UpdatedAt:     pb.UpdatedAt,
+		SchemaVersion: int(pb.SchemaVersion),
+	}, nil
 }
 
 // Close gracefully closes the Kafka reader.

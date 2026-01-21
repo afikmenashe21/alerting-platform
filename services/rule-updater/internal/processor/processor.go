@@ -94,6 +94,12 @@ func (p *Processor) ProcessRuleChanges(ctx context.Context) error {
 func (p *Processor) applyRuleChange(ctx context.Context, ruleChanged *events.RuleChanged) error {
 	switch ruleChanged.Action {
 	case events.ActionCreated, events.ActionUpdated:
+		if p.db == nil {
+			return fmt.Errorf("database is not configured")
+		}
+		if p.writer == nil {
+			return fmt.Errorf("snapshot writer is not configured")
+		}
 		// For CREATED or UPDATED, fetch the rule from database and add/update it directly in Redis
 		rule, err := p.db.GetRule(ctx, ruleChanged.RuleID)
 		if err != nil {
@@ -114,6 +120,9 @@ func (p *Processor) applyRuleChange(ctx context.Context, ruleChanged *events.Rul
 		)
 
 	case events.ActionDeleted, events.ActionDisabled:
+		if p.writer == nil {
+			return fmt.Errorf("snapshot writer is not configured")
+		}
 		// For DELETED or DISABLED, remove the rule directly from Redis using Lua script
 		if err := p.writer.RemoveRuleDirect(ctx, ruleChanged.RuleID); err != nil {
 			return fmt.Errorf("failed to remove rule from Redis: %w", err)

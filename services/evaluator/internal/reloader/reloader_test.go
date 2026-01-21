@@ -101,17 +101,21 @@ func TestReloader_ReloadNow_Integration(t *testing.T) {
 	idx1 := indexes.NewIndexes(snap1)
 	m := matcher.NewMatcher(idx1)
 	reloader := NewReloader(loader, m, 100*time.Millisecond)
-	reloader.currentVersion = 1 // Set initial version
+	// Align currentVersion with Redis so "version unchanged" path is exercised reliably.
+	version, err := loader.GetVersion(ctx)
+	if err != nil {
+		t.Fatalf("GetVersion() error = %v", err)
+	}
+	reloader.currentVersion = version
 
 	// Test version unchanged
-	err := reloader.ReloadNow(ctx)
+	err = reloader.ReloadNow(ctx)
 	if err != nil {
 		t.Errorf("Reloader.ReloadNow() error = %v, want nil (version unchanged)", err)
 	}
 
 	// Test with version change (if snapshot exists in Redis)
 	// This will only work if there's actually a snapshot in Redis
-	version, _ := loader.GetVersion(ctx)
 	if version > 0 {
 		reloader.currentVersion = version - 1
 		err = reloader.ReloadNow(ctx)

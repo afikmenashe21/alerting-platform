@@ -3,15 +3,16 @@ package producer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
+	pbnotifications "github.com/afikmenashe/alerting-platform/pkg/proto/notifications"
 	"aggregator/internal/events"
 	kafkautil "aggregator/internal/kafka"
 
 	"github.com/segmentio/kafka-go"
+	"google.golang.org/protobuf/proto"
 )
 
 // Producer wraps a Kafka writer and provides a simple interface for publishing notification ready events.
@@ -63,8 +64,14 @@ func NewProducer(brokers string, topic string) (*Producer, error) {
 // buildMessage creates a Kafka message from a NotificationReady event.
 // The message is keyed by client_id for partition distribution (tenant locality).
 func buildMessage(ready *events.NotificationReady) (kafka.Message, error) {
-	// Serialize notification ready event to JSON
-	payload, err := json.Marshal(ready)
+	pb := &pbnotifications.NotificationReady{
+		NotificationId: ready.NotificationID,
+		ClientId:       ready.ClientID,
+		AlertId:        ready.AlertID,
+		SchemaVersion:  int32(ready.SchemaVersion),
+	}
+
+	payload, err := proto.Marshal(pb)
 	if err != nil {
 		return kafka.Message{}, fmt.Errorf("failed to marshal notification ready event: %w", err)
 	}
@@ -77,6 +84,10 @@ func buildMessage(ready *events.NotificationReady) (kafka.Message, error) {
 		Key:   partitionKey,
 		Value: payload,
 		Headers: []kafka.Header{
+			{
+				Key:   "content-type",
+				Value: []byte("application/x-protobuf"),
+			},
 			{
 				Key:   "schema_version",
 				Value: []byte(fmt.Sprintf("%d", ready.SchemaVersion)),

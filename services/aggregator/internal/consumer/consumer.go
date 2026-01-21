@@ -3,13 +3,14 @@ package consumer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
+	pbalerts "github.com/afikmenashe/alerting-platform/pkg/proto/alerts"
 	"aggregator/internal/events"
 	kafkautil "aggregator/internal/kafka"
 	"github.com/segmentio/kafka-go"
+	"google.golang.org/protobuf/proto"
 )
 
 // Consumer wraps a Kafka reader and provides a simple interface for consuming matched alerts.
@@ -60,12 +61,24 @@ func (c *Consumer) ReadMessage(ctx context.Context) (*events.AlertMatched, *kafk
 		return nil, nil, fmt.Errorf("failed to read message from Kafka: %w", err)
 	}
 
-	var matched events.AlertMatched
-	if err := json.Unmarshal(msg.Value, &matched); err != nil {
-		return nil, &msg, fmt.Errorf("failed to unmarshal matched alert: %w", err)
+	var pb pbalerts.AlertMatched
+	if err := proto.Unmarshal(msg.Value, &pb); err != nil {
+		return nil, &msg, fmt.Errorf("failed to unmarshal matched alert protobuf: %w", err)
 	}
 
-	return &matched, &msg, nil
+	matched := &events.AlertMatched{
+		AlertID:       pb.AlertId,
+		SchemaVersion: int(pb.SchemaVersion),
+		EventTS:       pb.EventTs,
+		Severity:      pb.Severity.String(),
+		Source:        pb.Source,
+		Name:          pb.Name,
+		Context:       pb.Context,
+		ClientID:      pb.ClientId,
+		RuleIDs:       pb.RuleIds,
+	}
+
+	return matched, &msg, nil
 }
 
 // CommitMessage commits the offset for the given message.

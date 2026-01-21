@@ -41,4 +41,4 @@ Wildcard "*" matches any value for that field. At least one field must be non-wi
 - Baseline/anomaly upstream analytics (separate system)
 - Multi-channel delivery (Slack/webhooks) beyond email stub
 - Full retry scheduler / DLQ / rate limiting (can add later)
-- Schema registry (protobuf) — use JSON with `schema_version` field for now
+- External schema registry — Kafka events use protobuf messages with a `schema_version` field (see `proto/` + `pkg/proto/`), but no external registry service is used yet.

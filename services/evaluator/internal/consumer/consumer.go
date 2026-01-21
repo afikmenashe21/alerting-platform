@@ -3,13 +3,14 @@ package consumer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
+	pbalerts "github.com/afikmenashe/alerting-platform/pkg/proto/alerts"
 	"evaluator/internal/events"
 	kafkautil "evaluator/internal/kafka"
 	"github.com/segmentio/kafka-go"
+	"google.golang.org/protobuf/proto"
 )
 
 // Consumer wraps a Kafka reader and provides a simple interface for consuming alerts.
@@ -60,12 +61,22 @@ func (c *Consumer) ReadMessage(ctx context.Context) (*events.AlertNew, *kafka.Me
 		return nil, nil, fmt.Errorf("failed to read message from Kafka: %w", err)
 	}
 
-	var alert events.AlertNew
-	if err := json.Unmarshal(msg.Value, &alert); err != nil {
-		return nil, &msg, fmt.Errorf("failed to unmarshal alert: %w", err)
+	var pb pbalerts.AlertNew
+	if err := proto.Unmarshal(msg.Value, &pb); err != nil {
+		return nil, &msg, fmt.Errorf("failed to unmarshal alert protobuf: %w", err)
 	}
 
-	return &alert, &msg, nil
+	alert := &events.AlertNew{
+		AlertID:       pb.AlertId,
+		SchemaVersion: int(pb.SchemaVersion),
+		EventTS:       pb.EventTs,
+		Severity:      pb.Severity.String(),
+		Source:        pb.Source,
+		Name:          pb.Name,
+		Context:       pb.Context,
+	}
+
+	return alert, &msg, nil
 }
 
 // Close gracefully closes the Kafka reader and releases resources.

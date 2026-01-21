@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package alerting.common;
+
+option go_package = "github.com/afikmenashe/alerting-platform/pkg/proto/common";
+
+// Severity levels for alerts
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_LOW = 1;
+  SEVERITY_MEDIUM = 2;
+  SEVERITY_HIGH = 3;
+  SEVERITY_CRITICAL = 4;
+}
+
+// Rule change actions
+enum RuleAction {
+  RULE_ACTION_UNSPECIFIED = 0;
+  RULE_ACTION_CREATED = 1;
+  RULE_ACTION_UPDATED = 2;
+  RULE_ACTION_DELETED = 3;
+  RULE_ACTION_DISABLED = 4;
+}

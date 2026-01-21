@@ -2,12 +2,10 @@ package consumer
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
-	"rule-updater/internal/events"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -142,34 +140,6 @@ func TestConsumer_ReadMessage_InvalidJSON(t *testing.T) {
 	if err != nil {
 		// Expected if Kafka is not available or topic is empty
 		t.Logf("ReadMessage() error (expected in test environment): %v", err)
-	}
-}
-
-func TestConsumer_ReadMessage_ValidJSON(t *testing.T) {
-	// Test that ReadMessage correctly unmarshals valid JSON
-	// This would require a real Kafka message, so we test the logic indirectly
-	ruleChanged := events.RuleChanged{
-		RuleID:        "rule-123",
-		ClientID:      "client-456",
-		Action:        events.ActionCreated,
-		Version:       1,
-		UpdatedAt:     1234567890,
-		SchemaVersion: 1,
-	}
-
-	data, err := json.Marshal(ruleChanged)
-	if err != nil {
-		t.Fatalf("Failed to marshal RuleChanged: %v", err)
-	}
-
-	// Verify the JSON can be unmarshaled
-	var unmarshaled events.RuleChanged
-	if err := json.Unmarshal(data, &unmarshaled); err != nil {
-		t.Fatalf("Failed to unmarshal RuleChanged: %v", err)
-	}
-
-	if unmarshaled.RuleID != ruleChanged.RuleID {
-		t.Errorf("RuleID = %v, want %v", unmarshaled.RuleID, ruleChanged.RuleID)
 	}
 }
 

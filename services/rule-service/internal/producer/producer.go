@@ -3,14 +3,16 @@ package producer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	protorules "github.com/afikmenashe/alerting-platform/pkg/proto/rules"
+	protocommon "github.com/afikmenashe/alerting-platform/pkg/proto/common"
 	"rule-service/internal/events"
 	"github.com/segmentio/kafka-go"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -74,14 +76,37 @@ func NewProducer(brokers string, topic string) (*Producer, error) {
 }
 
 
-// Publish serializes a rule changed event to JSON and publishes it to Kafka.
+func toProtoRuleAction(action string) protocommon.RuleAction {
+	switch action {
+	case events.ActionCreated:
+		return protocommon.RuleAction_RULE_ACTION_CREATED
+	case events.ActionUpdated:
+		return protocommon.RuleAction_RULE_ACTION_UPDATED
+	case events.ActionDeleted:
+		return protocommon.RuleAction_RULE_ACTION_DELETED
+	case events.ActionDisabled:
+		return protocommon.RuleAction_RULE_ACTION_DISABLED
+	default:
+		return protocommon.RuleAction_RULE_ACTION_UNSPECIFIED
+	}
+}
+
+// Publish serializes a rule changed event to protobuf and publishes it to Kafka.
 // The message is keyed by rule_id for partition distribution.
 // Returns an error if serialization or publishing fails.
 func (p *Producer) Publish(ctx context.Context, changed *events.RuleChanged) error {
-	// Serialize rule changed event to JSON
-	payload, err := json.Marshal(changed)
+	evt := &protorules.RuleChanged{
+		RuleId:        changed.RuleID,
+		ClientId:      changed.ClientID,
+		Action:        toProtoRuleAction(changed.Action),
+		Version:       int32(changed.Version),
+		UpdatedAt:     changed.UpdatedAt,
+		SchemaVersion: int32(changed.SchemaVersion),
+	}
+
+	payload, err := proto.Marshal(evt)
 	if err != nil {
-		slog.Error("Failed to marshal rule changed event to JSON",
+		slog.Error("Failed to marshal rule changed event to protobuf",
 			"rule_id", changed.RuleID,
 			"client_id", changed.ClientID,
 			"action", changed.Action,
@@ -98,6 +123,10 @@ func (p *Producer) Publish(ctx context.Context, changed *events.RuleChanged) err
 		Key:   partitionKey,
 		Value: payload,
 		Headers: []kafka.Header{
+			{
+				Key:   "content-type",
+				Value: []byte("application/x-protobuf"),
+			},
 			{
 				Key:   "schema_version",
 				Value: []byte(fmt.Sprintf("%d", changed.SchemaVersion)),

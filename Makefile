@@ -1,4 +1,4 @@
-.PHONY: check-migrations list-migrations migration-status help setup-infra verify-deps run-migrations create-topics generate-test-data run-all run-all-bg run-producer run-single-test stop-services stop-infra stop-all
+.PHONY: check-migrations list-migrations migration-status help setup-infra verify-deps run-migrations create-topics generate-test-data run-all run-all-bg run-producer run-single-test stop-services stop-infra stop-all proto-generate proto-validate proto-check-deps proto-verify proto-install-deps
 
 help:
 	@echo "Infrastructure Management:"
@@ -20,6 +20,13 @@ help:
 	@echo "  check-migrations  - Validate migration consistency across services"
 	@echo "  list-migrations   - List all migrations across services"
 	@echo "  migration-status  - Show current database migration status"
+	@echo ""
+	@echo "Protobuf Management:"
+	@echo "  proto-check-deps  - Check if protobuf dependencies are installed"
+	@echo "  proto-verify      - Comprehensive verification of protobuf setup"
+	@echo "  proto-generate    - Generate Go code from .proto files"
+	@echo "  proto-validate    - Validate .proto files for errors"
+	@echo "  proto-install-deps - Install protoc and Go plugins (macOS/Linux)"
 	@echo ""
 	@echo "Test Data:"
 	@echo "  generate-test-data - Clean database and generate 100 clients with rules and endpoints"
@@ -136,3 +143,56 @@ stop-all:
 	@./scripts/services/stop-all-services.sh
 	@echo ""
 	@./scripts/infrastructure/stop-infrastructure.sh
+
+# Protobuf code generation (centralized)
+PROTO_DIR := proto
+PROTO_OUT := pkg/proto
+PROTOC := protoc
+PROTOC_GEN_GO := protoc-gen-go
+
+# Check if protoc is installed
+check-protoc:
+	@which $(PROTOC) > /dev/null || (echo "Error: protoc not found. Install with: brew install protobuf" && exit 1)
+
+# Check if protoc-gen-go is installed
+check-protoc-gen-go:
+	@which $(PROTOC_GEN_GO) > /dev/null || (echo "Error: protoc-gen-go not found. Install with: brew install protoc-gen-go" && exit 1)
+
+# Check all protobuf dependencies
+proto-check-deps:
+	@./scripts/proto/check-proto-deps.sh
+
+# Comprehensive verification
+proto-verify:
+	@./scripts/proto/verify-proto.sh
+
+# Generate Go code from .proto files
+proto-generate: check-protoc check-protoc-gen-go
+	@echo "Generating Go code from .proto files..."
+	@mkdir -p $(PROTO_OUT)
+	@$(PROTOC) \
+		--go_out=$(PROTO_OUT) \
+		--go_opt=module=github.com/afikmenashe/alerting-platform/pkg/proto \
+		--go_opt=paths=import \
+		-I$(PROTO_DIR) \
+		$(PROTO_DIR)/common.proto \
+		$(PROTO_DIR)/alerts.proto \
+		$(PROTO_DIR)/rules.proto \
+		$(PROTO_DIR)/notifications.proto
+	@echo "✅ Protobuf code generation complete"
+	@echo "Generated files are in $(PROTO_OUT)/"
+
+# Validate .proto files
+proto-validate: check-protoc
+	@echo "Validating .proto files..."
+	@$(PROTOC) --proto_path=$(PROTO_DIR) --descriptor_set_out=/dev/null $(PROTO_DIR)/*.proto 2>&1 || (echo "❌ Validation failed" && exit 1)
+	@echo "✅ All .proto files are valid"
+
+# Install protobuf dependencies (macOS/Linux)
+proto-install-deps:
+	@echo "Install protobuf deps:"
+	@echo "  macOS:"
+	@echo "    brew install protobuf protoc-gen-go"
+	@echo "  Linux (Ubuntu/Debian):"
+	@echo "    sudo apt-get install protobuf-compiler"
+	@echo "    go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"

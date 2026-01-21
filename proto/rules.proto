@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package alerting.rules;
+
+import "common.proto";
+
+option go_package = "github.com/afikmenashe/alerting-platform/pkg/proto/rules";
+
+// RuleChanged represents a rule change event (rule.changed topic)
+message RuleChanged {
+  string rule_id = 1;                     // UUID of the rule
+  string client_id = 2;                   // Client ID the rule belongs to
+  alerting.common.RuleAction action = 3;  // CREATED, UPDATED, DELETED, DISABLED
+  int32 version = 4;                      // Rule version (optimistic locking)
+  int64 updated_at = 5;                   // Unix timestamp
+  int32 schema_version = 6;               // Schema version (currently 1)
+}

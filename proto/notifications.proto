@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package alerting.notifications;
+
+option go_package = "github.com/afikmenashe/alerting-platform/pkg/proto/notifications";
+
+// NotificationReady represents a notification ready event (notifications.ready topic)
+message NotificationReady {
+  string notification_id = 1;              // UUID of the notification
+  string client_id = 2;                   // Client ID
+  string alert_id = 3;                    // Alert ID
+  int32 schema_version = 4;               // Schema version (currently 1)
+}

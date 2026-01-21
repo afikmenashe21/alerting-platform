@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package alerting.alerts;
+
+import "common.proto";
+
+option go_package = "github.com/afikmenashe/alerting-platform/pkg/proto/alerts";
+
+// AlertNew represents a new alert event (alerts.new topic)
+message AlertNew {
+  string alert_id = 1;                    // UUID v4
+  int32 schema_version = 2;               // Schema version (currently 1)
+  int64 event_ts = 3;                     // Unix timestamp (seconds)
+  alerting.common.Severity severity = 4;  // Alert severity
+  string source = 5;                      // Source system
+  string name = 6;                        // Alert name/type
+  map<string, string> context = 7;        // Optional context metadata
+}
+
+// AlertMatched represents a matched alert (alerts.matched topic)
+message AlertMatched {
+  string alert_id = 1;
+  int32 schema_version = 2;
+  int64 event_ts = 3;
+  alerting.common.Severity severity = 4;
+  string source = 5;
+  string name = 6;
+  map<string, string> context = 7;
+  string client_id = 8;                   // Client this alert matched for
+  repeated string rule_ids = 9;           // Rule IDs that matched
+}

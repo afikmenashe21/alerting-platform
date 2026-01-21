@@ -5,7 +5,6 @@ package producer
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,7 +12,10 @@ import (
 	"time"
 
 	"alert-producer/internal/generator"
+	pbalerts "github.com/afikmenashe/alerting-platform/pkg/proto/alerts"
+	pbcommon "github.com/afikmenashe/alerting-platform/pkg/proto/common"
 	"github.com/segmentio/kafka-go"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -88,14 +90,35 @@ func New(brokers string, topic string) (*Producer, error) {
 }
 
 
-// Publish serializes an alert to JSON and publishes it to Kafka.
+// Publish serializes an alert to protobuf and publishes it to Kafka.
 // The message is keyed by alert_id for even partition distribution.
 // Returns an error if serialization or publishing fails.
 func (p *Producer) Publish(ctx context.Context, alert *generator.Alert) error {
-	// Serialize alert to JSON
-	payload, err := json.Marshal(alert)
+	sev := pbcommon.Severity_SEVERITY_UNSPECIFIED
+	switch strings.ToUpper(alert.Severity) {
+	case "LOW":
+		sev = pbcommon.Severity_SEVERITY_LOW
+	case "MEDIUM":
+		sev = pbcommon.Severity_SEVERITY_MEDIUM
+	case "HIGH":
+		sev = pbcommon.Severity_SEVERITY_HIGH
+	case "CRITICAL":
+		sev = pbcommon.Severity_SEVERITY_CRITICAL
+	}
+
+	pb := &pbalerts.AlertNew{
+		AlertId:       alert.AlertID,
+		SchemaVersion: int32(alert.SchemaVersion),
+		EventTs:       alert.EventTS,
+		Severity:      sev,
+		Source:        alert.Source,
+		Name:          alert.Name,
+		Context:       alert.Context,
+	}
+
+	payload, err := proto.Marshal(pb)
 	if err != nil {
-		slog.Error("Failed to marshal alert to JSON",
+		slog.Error("Failed to marshal alert to protobuf",
 			"alert_id", alert.AlertID,
 			"error", err,
 		)
@@ -112,6 +135,10 @@ func (p *Producer) Publish(ctx context.Context, alert *generator.Alert) error {
 		Key:   partitionKey,
 		Value: payload,
 		Headers: []kafka.Header{
+			{
+				Key:   "content-type",
+				Value: []byte("application/x-protobuf"),
+			},
 			{
 				Key:   "schema_version",
 				Value: []byte(fmt.Sprintf("%d", alert.SchemaVersion)),

@@ -46,8 +46,8 @@
 - **Validation**: Run `make check-migrations` from root to validate consistency
 - **Documentation**: See `migrations/MIGRATION_STRATEGY.md` for full strategy
 
-## Event format (MVP)
-- JSON with `schema_version` field.
+## Event format
+- Protobuf messages defined in `proto/*.proto`, generated Go types in `pkg/proto`.
 - Stable IDs:
   - `alert_id`: provided by producer; else hash of `(severity,source,name,event_ts)`
   - `rule_id`: UUID from DB

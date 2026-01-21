@@ -3,14 +3,15 @@ package consumer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	protorules "github.com/afikmenashe/alerting-platform/pkg/proto/rules"
 	"rule-updater/internal/events"
 	"github.com/segmentio/kafka-go"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -86,9 +87,18 @@ func (c *Consumer) ReadMessage(ctx context.Context) (*events.RuleChanged, *kafka
 		return nil, nil, fmt.Errorf("failed to read message from Kafka: %w", err)
 	}
 
-	var ruleChanged events.RuleChanged
-	if err := json.Unmarshal(msg.Value, &ruleChanged); err != nil {
-		return nil, &msg, fmt.Errorf("failed to unmarshal rule.changed event: %w", err)
+	var pb protorules.RuleChanged
+	if err := proto.Unmarshal(msg.Value, &pb); err != nil {
+		return nil, &msg, fmt.Errorf("failed to unmarshal protobuf rule.changed event: %w", err)
+	}
+
+	ruleChanged := events.RuleChanged{
+		RuleID:        pb.RuleId,
+		ClientID:      pb.ClientId,
+		Action:        pb.Action.String(), // keep existing string-based action in local events
+		Version:       int(pb.Version),
+		UpdatedAt:     pb.UpdatedAt,
+		SchemaVersion: int(pb.SchemaVersion),
 	}
 
 	return &ruleChanged, &msg, nil

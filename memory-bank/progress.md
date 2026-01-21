@@ -4,10 +4,10 @@
 - Kafka for replay + at-least-once.
 - Postgres for control-plane + notification idempotency boundary.
 - Redis snapshot for evaluator warmup.
-- JSON contracts, add schema_version.
+- Event contracts defined in protobuf (`proto/*.proto` + `pkg/proto`).
 
 ## Milestones
-- [x] Topic contracts finalized (JSON structs + sample payloads)
+- [x] Topic contracts finalized (protobuf messages + sample payloads)
 - [x] Postgres migrations: clients/rules (rule-service)
 - [x] rule-service: CRUD + publish rule.changed
 - [x] rule-updater: rebuild snapshot → Redis + bump version
@@ -149,3 +149,16 @@
   - Real-time status monitoring and job tracking
   - Preset configurations and manual configuration options
   - See `services/alert-producer/memory-bank/` for detailed design
+
+- **Protobuf Integration Infrastructure (Phase 1 Complete)**: Foundation for migrating from JSON to protobuf
+  - Created protobuf definition files (`proto/` directory):
+    - `common.proto`: Shared enums (Severity, RuleAction)
+    - `alerts.proto`: AlertNew and AlertMatched messages
+    - `rules.proto`: RuleChanged message
+    - `notifications.proto`: NotificationReady message
+  - Setup build tooling:
+    - Makefile targets: `proto-generate`, `proto-validate`, `proto-verify`, `proto-check-deps`
+  - Created shared proto package structure (`pkg/proto/`)
+  - Comprehensive documentation:
+    - Strategy document: `docs/architecture/PROTOBUF_INTEGRATION_STRATEGY.md`
+  - Next steps: Generate Go code (`make proto-generate`) and begin service-by-service migration

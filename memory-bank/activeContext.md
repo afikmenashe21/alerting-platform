@@ -4,7 +4,7 @@
 We are building the MVP services in Go and want a Cursor “Memory Bank” to capture the exact design decisions and contracts.
 
 Completed:
-- ✅ Event contracts + topic names defined
+- ✅ Event contracts + topic names defined (protobuf messages)
 - ✅ alert-producer: generate alerts + load tests
 - ✅ evaluator: warmup + matching + `alerts.matched` output (one message per client_id)
 - ✅ aggregator: idempotent insert + `notifications.ready` output
@@ -17,6 +17,7 @@ In progress / Next:
 5) ✅ rule-service-ui: React UI for managing clients, rules, and endpoints
 6) ✅ Centralized infrastructure management (Postgres, Kafka, Redis, Zookeeper)
 7) 🔄 UI Integration for alert-producer: Add HTTP API wrapper and UI component for generating alerts with optional manual config
+8) ✅ Protobuf Integration: All Kafka topics now use protobuf messages defined in `proto/*.proto` with generated Go types in `pkg/proto/`; JSON wire format for Kafka events has been fully removed.
 
 ## Code health
 - Completed comprehensive cleanup and modularization across all services:
@@ -29,6 +30,6 @@ In progress / Next:
 - Rules support exact match and wildcard "*" on (severity, source, name).
 - Dedupe in aggregator DB unique constraint.
 - Redis snapshot warm start (no evaluator DB reads).
-- JSON messages with schema_version.
+- Protobuf messages for all Kafka topics (no JSON wire format on Kafka).
 - Evaluator output: one message per client_id (keyed by client_id for tenant locality).
 - Wildcard support: "*" matches any value for that field, enabling multiple rules per client to match same alert.

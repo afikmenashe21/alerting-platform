@@ -1,6 +1,6 @@
 module alert-producer
 
-go 1.22
+go 1.25.6
 
 require (
 	github.com/google/uuid v1.6.0
@@ -8,6 +8,10 @@ require (
 )
 
 require (
+	github.com/afikmenashe/alerting-platform/pkg/proto v0.0.0
 	github.com/klauspost/compress v1.15.9 // indirect
 	github.com/pierrec/lz4/v4 v4.1.15 // indirect
+	google.golang.org/protobuf v1.32.0
 )
+
+replace github.com/afikmenashe/alerting-platform/pkg/proto => ../../pkg/proto

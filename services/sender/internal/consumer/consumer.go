@@ -3,14 +3,15 @@ package consumer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	pbnotifications "github.com/afikmenashe/alerting-platform/pkg/proto/notifications"
 	"sender/internal/events"
 	"github.com/segmentio/kafka-go"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -86,12 +87,19 @@ func (c *Consumer) ReadMessage(ctx context.Context) (*events.NotificationReady, 
 		return nil, nil, fmt.Errorf("failed to read message from Kafka: %w", err)
 	}
 
-	var ready events.NotificationReady
-	if err := json.Unmarshal(msg.Value, &ready); err != nil {
-		return nil, &msg, fmt.Errorf("failed to unmarshal notification ready event: %w", err)
+	var pb pbnotifications.NotificationReady
+	if err := proto.Unmarshal(msg.Value, &pb); err != nil {
+		return nil, &msg, fmt.Errorf("failed to unmarshal notification ready protobuf: %w", err)
 	}
 
-	return &ready, &msg, nil
+	ready := &events.NotificationReady{
+		NotificationID: pb.NotificationId,
+		ClientID:       pb.ClientId,
+		AlertID:        pb.AlertId,
+		SchemaVersion:  int(pb.SchemaVersion),
+	}
+
+	return ready, &msg, nil
 }
 
 // CommitMessage commits the offset for the given message.

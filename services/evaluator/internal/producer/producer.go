@@ -3,14 +3,16 @@ package producer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
+	pbalerts "github.com/afikmenashe/alerting-platform/pkg/proto/alerts"
+	pbcommon "github.com/afikmenashe/alerting-platform/pkg/proto/common"
 	"evaluator/internal/events"
 	kafkautil "evaluator/internal/kafka"
 	"github.com/segmentio/kafka-go"
+	"google.golang.org/protobuf/proto"
 )
 
 // Producer wraps a Kafka writer and provides a simple interface for publishing matched alerts.
@@ -111,14 +113,37 @@ func createTopicIfNotExists(broker, topic string) {
 	)
 }
 
-// Publish serializes a matched alert to JSON and publishes it to Kafka.
+// Publish serializes a matched alert to protobuf and publishes it to Kafka.
 // The message is keyed by client_id for partition distribution (tenant locality).
 // Returns an error if serialization or publishing fails.
 func (p *Producer) Publish(ctx context.Context, matched *events.AlertMatched) error {
-	// Serialize matched alert to JSON
-	payload, err := json.Marshal(matched)
+	sev := pbcommon.Severity_SEVERITY_UNSPECIFIED
+	switch matched.Severity {
+	case "LOW":
+		sev = pbcommon.Severity_SEVERITY_LOW
+	case "MEDIUM":
+		sev = pbcommon.Severity_SEVERITY_MEDIUM
+	case "HIGH":
+		sev = pbcommon.Severity_SEVERITY_HIGH
+	case "CRITICAL":
+		sev = pbcommon.Severity_SEVERITY_CRITICAL
+	}
+
+	pb := &pbalerts.AlertMatched{
+		AlertId:       matched.AlertID,
+		SchemaVersion: int32(matched.SchemaVersion),
+		EventTs:       matched.EventTS,
+		Severity:      sev,
+		Source:        matched.Source,
+		Name:          matched.Name,
+		Context:       matched.Context,
+		ClientId:      matched.ClientID,
+		RuleIds:       matched.RuleIDs,
+	}
+
+	payload, err := proto.Marshal(pb)
 	if err != nil {
-		slog.Error("Failed to marshal matched alert to JSON",
+		slog.Error("Failed to marshal matched alert to protobuf",
 			"alert_id", matched.AlertID,
 			"client_id", matched.ClientID,
 			"error", err,
@@ -134,6 +159,10 @@ func (p *Producer) Publish(ctx context.Context, matched *events.AlertMatched) er
 		Key:   partitionKey,
 		Value: payload,
 		Headers: []kafka.Header{
+			{
+				Key:   "content-type",
+				Value: []byte("application/x-protobuf"),
+			},
 			{
 				Key:   "schema_version",
 				Value: []byte(fmt.Sprintf("%d", matched.SchemaVersion)),
