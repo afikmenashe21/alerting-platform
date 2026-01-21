@@ -11,11 +11,17 @@ modules:
       # Disable directory structure rules to allow flat proto layout
       # Our flat structure (all .proto files in proto/ directory) is valid
       # for protoc and works well for this monorepo project
+      #
+      # Disable enum naming rules to align with database format
+      # We intentionally use LOW, MEDIUM, HIGH, CRITICAL (without SEVERITY_ prefix)
+      # to match the database enum values directly. See docs/architecture/PROTOBUF_ENUM_DESIGN.md
       except:
         - DIRECTORY_SAME_PACKAGE       # Allow different packages in same directory
         - PACKAGE_DIRECTORY_MATCH      # Allow all protos in one directory
         - PACKAGE_SAME_DIRECTORY       # Allow multiple packages in same directory
         - PACKAGE_VERSION_SUFFIX       # We don't use versioned packages (v1, v2, etc.)
+        - ENUM_VALUE_PREFIX            # Allow enum values without type prefix (LOW vs SEVERITY_LOW)
+        - ENUM_ZERO_VALUE_SUFFIX       # Allow UNSPECIFIED without type suffix
       
       # Configure naming conventions
       enum_zero_value_suffix: _UNSPECIFIED
