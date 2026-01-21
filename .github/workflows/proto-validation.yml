@@ -36,8 +36,9 @@ jobs:
       
       - name: Install protoc
         run: |
-          # Install specific version of protoc to match local development
-          PROTOC_VERSION=28.3
+          # Install modern version of protoc (using protoc v29+)
+          # Allows buf to handle protoc version via buf.gen.yaml
+          PROTOC_VERSION=29.3
           PROTOC_ZIP=protoc-${PROTOC_VERSION}-linux-x86_64.zip
           curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/${PROTOC_ZIP}
           sudo unzip -o ${PROTOC_ZIP} -d /usr/local bin/protoc

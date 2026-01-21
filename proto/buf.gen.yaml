@@ -7,8 +7,8 @@ version: v2
 # Future option: Use `buf generate` for more streamlined workflow
 
 plugins:
-  # Go protobuf plugin
-  - remote: buf.build/protocolbuffers/go
+  # Go protobuf plugin (uses locally installed protoc-gen-go)
+  - local: protoc-gen-go
     out: ../pkg/proto
     opt:
       - module=github.com/afikmenashe/alerting-platform/pkg/proto

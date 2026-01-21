@@ -161,6 +161,10 @@ check-protoc:
 check-protoc-gen-go:
 	@which $(PROTOC_GEN_GO) > /dev/null || (echo "Error: protoc-gen-go not found. Install with: brew install protoc-gen-go" && exit 1)
 
+# Check if buf is installed
+check-buf:
+	@which buf > /dev/null || command -v buf > /dev/null || (echo "Error: buf not found. Install with: brew install bufbuild/buf/buf" && exit 1)
+
 # Check all protobuf dependencies
 proto-check-deps:
 	@./scripts/proto/check-proto-deps.sh
@@ -169,19 +173,11 @@ proto-check-deps:
 proto-verify:
 	@./scripts/proto/verify-proto.sh
 
-# Generate Go code from .proto files
-proto-generate: check-protoc check-protoc-gen-go
+# Generate Go code from .proto files using buf for consistency
+proto-generate: check-buf check-protoc-gen-go
 	@echo "Generating Go code from .proto files..."
 	@mkdir -p $(PROTO_OUT)
-	@$(PROTOC) \
-		--go_out=$(PROTO_OUT) \
-		--go_opt=module=github.com/afikmenashe/alerting-platform/pkg/proto \
-		--go_opt=paths=import \
-		-I$(PROTO_DIR) \
-		$(PROTO_DIR)/common.proto \
-		$(PROTO_DIR)/alerts.proto \
-		$(PROTO_DIR)/rules.proto \
-		$(PROTO_DIR)/notifications.proto
+	@cd $(PROTO_DIR) && buf generate
 	@echo "✅ Protobuf code generation complete"
 	@echo "Generated files are in $(PROTO_OUT)/"
 
