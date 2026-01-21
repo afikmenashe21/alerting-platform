@@ -1,0 +1,19 @@
+version: v2
+# Buf code generation configuration
+# Alternative to using protoc directly via Makefile
+
+# This file provides an alternative code generation method using buf
+# Current approach: Makefile uses protoc directly (proto-generate target)
+# Future option: Use `buf generate` for more streamlined workflow
+
+plugins:
+  # Go protobuf plugin
+  - remote: buf.build/protocolbuffers/go
+    out: ../pkg/proto
+    opt:
+      - module=github.com/afikmenashe/alerting-platform/pkg/proto
+      - paths=import
+
+# Inputs (proto files to generate from)
+inputs:
+  - directory: .

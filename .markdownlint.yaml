@@ -1,0 +1,11 @@
+# Markdown linting configuration
+# Used by pre-commit hooks and editors
+
+# Default state for all rules
+default: true
+
+# Specific rule overrides
+MD013: false  # Line length - allow long lines in technical docs
+MD033: false  # Inline HTML - allow HTML in markdown
+MD041: false  # First line heading - allow other content first
+MD046: false  # Code block style - allow both fenced and indented

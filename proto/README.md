@@ -23,9 +23,10 @@ Before generating Go code, you need:
    go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
    ```
 
-3. **buf** (optional, for linting)
+3. **buf** (recommended, for linting and breaking change detection)
    - macOS: `brew install bufbuild/buf/buf`
-   - Or see: https://buf.build/docs/installation
+   - Linux: See https://buf.build/docs/installation
+   - Provides advanced linting and schema evolution checks
 
 ## Generating Go Code
 
@@ -41,8 +42,14 @@ make proto-generate
 # Validate proto files
 make proto-validate
 
-# Lint proto files (optional, requires buf)
+# Verify generated code is up-to-date
+make proto-verify-generated
+
+# Lint proto files (requires buf)
 make proto-lint
+
+# Check for breaking changes (requires buf)
+make proto-breaking
 ```
 
 ## Generated Code Location
@@ -84,5 +91,36 @@ When modifying `.proto` files:
 2. **Use optional for new fields** - Maintains backward compatibility
 3. **Deprecate before removing** - Mark fields as deprecated first
 4. **Test compatibility** - Ensure old consumers can read new messages
+5. **Check for breaking changes** - Run `make proto-breaking` before committing
+6. **Verify generated code** - Run `make proto-verify-generated` to ensure code is current
 
 See the [Protobuf Integration Strategy](../docs/architecture/PROTOBUF_INTEGRATION_STRATEGY.md) for migration details.
+
+## Buf Configuration
+
+This project uses `buf` for enhanced proto linting and breaking change detection:
+
+- **`buf.yaml`** - Linting and breaking change rules
+- **`buf.gen.yaml`** - Alternative code generation configuration (optional)
+
+The configuration allows our flat directory structure (all .proto files in `proto/`) while enforcing best practices for naming, syntax, and compatibility.
+
+## CI/CD Integration
+
+Recommended checks for continuous integration:
+
+```bash
+# Validate proto syntax
+make proto-validate
+
+# Lint for best practices
+make proto-lint
+
+# Check for breaking changes
+make proto-breaking
+
+# Verify generated code is current
+make proto-verify-generated
+```
+
+These checks ensure proto definitions stay valid and generated code stays synchronized.

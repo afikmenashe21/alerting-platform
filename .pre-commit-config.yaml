@@ -1,0 +1,59 @@
+# Pre-commit hooks configuration
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+#
+# This ensures proto files are validated and generated code is current
+# before commits are made
+
+repos:
+  # Protobuf validation hooks
+  - repo: local
+    hooks:
+      # Validate proto syntax
+      - id: proto-validate
+        name: Validate proto files
+        entry: make proto-validate
+        language: system
+        files: \.proto$
+        pass_filenames: false
+      
+      # Lint proto files with buf
+      - id: proto-lint
+        name: Lint proto files with buf
+        entry: make proto-lint
+        language: system
+        files: \.proto$
+        pass_filenames: false
+      
+      # Verify generated code is up-to-date
+      - id: proto-verify-generated
+        name: Verify generated proto code is current
+        entry: make proto-verify-generated
+        language: system
+        files: \.proto$
+        pass_filenames: false
+  
+  # General code quality hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--unsafe']  # Allow custom tags in docker-compose
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: detect-private-key
+  
+  # Markdown linting (optional)
+  - repo: https://github.com/markdownlint/markdownlint
+    rev: v0.12.0
+    hooks:
+      - id: markdownlint
+        args: ['--config', '.markdownlint.yaml']
+        files: \.md$
+
+# Configuration
+default_stages: [commit]
+fail_fast: false  # Run all hooks even if one fails

@@ -1,4 +1,4 @@
-.PHONY: check-migrations list-migrations migration-status help setup-infra verify-deps run-migrations create-topics generate-test-data run-all run-all-bg run-producer run-single-test stop-services stop-infra stop-all proto-generate proto-validate proto-check-deps proto-verify proto-install-deps
+.PHONY: check-migrations list-migrations migration-status help setup-infra verify-deps run-migrations create-topics generate-test-data run-all run-all-bg run-producer run-single-test stop-services stop-infra stop-all proto-generate proto-validate proto-check-deps proto-verify proto-install-deps proto-lint proto-breaking proto-verify-generated
 
 help:
 	@echo "Infrastructure Management:"
@@ -22,11 +22,14 @@ help:
 	@echo "  migration-status  - Show current database migration status"
 	@echo ""
 	@echo "Protobuf Management:"
-	@echo "  proto-check-deps  - Check if protobuf dependencies are installed"
-	@echo "  proto-verify      - Comprehensive verification of protobuf setup"
-	@echo "  proto-generate    - Generate Go code from .proto files"
-	@echo "  proto-validate    - Validate .proto files for errors"
-	@echo "  proto-install-deps - Install protoc and Go plugins (macOS/Linux)"
+	@echo "  proto-check-deps       - Check if protobuf dependencies are installed"
+	@echo "  proto-verify           - Comprehensive verification of protobuf setup"
+	@echo "  proto-generate         - Generate Go code from .proto files"
+	@echo "  proto-validate         - Validate .proto files for errors"
+	@echo "  proto-lint             - Lint proto files with buf (requires buf)"
+	@echo "  proto-breaking         - Check for breaking changes against main branch"
+	@echo "  proto-verify-generated - Verify generated code is up-to-date"
+	@echo "  proto-install-deps     - Install protoc and Go plugins (macOS/Linux)"
 	@echo ""
 	@echo "Test Data:"
 	@echo "  generate-test-data - Clean database and generate 100 clients with rules and endpoints"
@@ -192,7 +195,33 @@ proto-validate: check-protoc
 proto-install-deps:
 	@echo "Install protobuf deps:"
 	@echo "  macOS:"
-	@echo "    brew install protobuf protoc-gen-go"
+	@echo "    brew install protobuf protoc-gen-go buf"
 	@echo "  Linux (Ubuntu/Debian):"
 	@echo "    sudo apt-get install protobuf-compiler"
 	@echo "    go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
+	@echo "    brew install bufbuild/buf/buf  # or see https://buf.build/docs/installation"
+
+# Lint proto files using buf (optional, requires buf)
+proto-lint:
+	@echo "Linting proto files with buf..."
+	@if ! command -v buf &> /dev/null; then \
+		echo "❌ buf not found. Install it first: brew install bufbuild/buf/buf"; \
+		echo "   or see: https://buf.build/docs/installation"; \
+		exit 1; \
+	fi
+	@cd $(PROTO_DIR) && buf lint
+	@echo "✅ Proto files linted successfully"
+
+# Check for breaking changes against main branch (requires buf and git)
+proto-breaking:
+	@echo "Checking for breaking changes in proto files..."
+	@if ! command -v buf &> /dev/null; then \
+		echo "❌ buf not found. Install it first: brew install bufbuild/buf/buf"; \
+		exit 1; \
+	fi
+	@cd $(PROTO_DIR) && buf breaking --against '.git#branch=main'
+	@echo "✅ No breaking changes detected"
+
+# Verify that generated code is up-to-date with proto definitions
+proto-verify-generated:
+	@./scripts/proto/verify-generated-code.sh

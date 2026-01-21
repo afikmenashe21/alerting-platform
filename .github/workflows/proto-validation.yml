@@ -1,0 +1,79 @@
+# GitHub Actions workflow for protobuf validation
+# This workflow runs on every PR and push to ensure proto definitions are valid
+# and generated code is up-to-date
+
+name: Protobuf Validation
+
+on:
+  pull_request:
+    paths:
+      - 'proto/**'
+      - 'pkg/proto/**'
+      - '.github/workflows/proto-validation.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'proto/**'
+      - 'pkg/proto/**'
+
+jobs:
+  validate:
+    name: Validate Protobuf Definitions
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for breaking change detection
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          protoc --version
+      
+      - name: Install protoc-gen-go
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+      
+      - name: Install buf
+        uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+      
+      - name: Validate proto files
+        run: make proto-validate
+      
+      - name: Lint proto files
+        run: make proto-lint
+      
+      - name: Verify generated code is up-to-date
+        run: make proto-verify-generated
+      
+      - name: Check for breaking changes (on PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          # Compare against target branch
+          make proto-breaking || echo "⚠️  Breaking changes detected - review carefully"
+        continue-on-error: true  # Don't fail build, just warn
+      
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request' && failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ Protobuf validation failed! Please check the workflow logs and run `make proto-generate` to update generated code.'
+            })

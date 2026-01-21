@@ -150,15 +150,28 @@
   - Preset configurations and manual configuration options
   - See `services/alert-producer/memory-bank/` for detailed design
 
-- **Protobuf Integration Infrastructure (Phase 1 Complete)**: Foundation for migrating from JSON to protobuf
+- **Protobuf Integration (Complete)**: All Kafka topics migrated from JSON to protobuf
   - Created protobuf definition files (`proto/` directory):
     - `common.proto`: Shared enums (Severity, RuleAction)
     - `alerts.proto`: AlertNew and AlertMatched messages
     - `rules.proto`: RuleChanged message
     - `notifications.proto`: NotificationReady message
-  - Setup build tooling:
-    - Makefile targets: `proto-generate`, `proto-validate`, `proto-verify`, `proto-check-deps`
-  - Created shared proto package structure (`pkg/proto/`)
+  - Generated Go code in `pkg/proto/` with proper module setup
+  - All 6 services migrated to use protobuf serialization:
+    - alert-producer: publishes AlertNew with proto.Marshal
+    - evaluator: consumes AlertNew, publishes AlertMatched
+    - aggregator: consumes AlertMatched, publishes NotificationReady
+    - rule-service: publishes RuleChanged
+    - rule-updater: consumes RuleChanged
+    - sender: consumes NotificationReady
+  - Enhanced tooling (added 2026-01):
+    - Makefile targets: `proto-generate`, `proto-validate`, `proto-lint`, `proto-breaking`, `proto-verify-generated`
+    - Buf configuration (`buf.yaml`) for linting and breaking change detection
+    - Verification script to ensure generated code stays current
+    - GitHub Actions workflow for CI validation
+    - Pre-commit hooks for local validation
   - Comprehensive documentation:
-    - Strategy document: `docs/architecture/PROTOBUF_INTEGRATION_STRATEGY.md`
-  - Next steps: Generate Go code (`make proto-generate`) and begin service-by-service migration
+    - Strategy: `docs/architecture/PROTOBUF_INTEGRATION_STRATEGY.md`
+    - Tooling: `docs/architecture/PROTOBUF_TOOLING.md`
+    - Usage guide: `proto/README.md`
+  - Benefits: Binary serialization, type safety, schema evolution, reduced message size

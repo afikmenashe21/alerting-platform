@@ -1,0 +1,35 @@
+version: v2
+# Buf configuration for protobuf linting and breaking change detection
+# See: https://buf.build/docs/configuration/v2/buf-yaml
+
+# Module configuration
+modules:
+  - path: .
+    lint:
+      use:
+        - STANDARD
+      # Disable directory structure rules to allow flat proto layout
+      # Our flat structure (all .proto files in proto/ directory) is valid
+      # for protoc and works well for this monorepo project
+      except:
+        - DIRECTORY_SAME_PACKAGE       # Allow different packages in same directory
+        - PACKAGE_DIRECTORY_MATCH      # Allow all protos in one directory
+        - PACKAGE_SAME_DIRECTORY       # Allow multiple packages in same directory
+        - PACKAGE_VERSION_SUFFIX       # We don't use versioned packages (v1, v2, etc.)
+      
+      # Configure naming conventions
+      enum_zero_value_suffix: _UNSPECIFIED
+      rpc_allow_same_request_response: false
+      rpc_allow_google_protobuf_empty_requests: true
+      rpc_allow_google_protobuf_empty_responses: true
+      service_suffix: Service
+      
+    breaking:
+      use:
+        - FILE
+      # Detect breaking changes in fields, messages, enums
+      # Usage: buf breaking --against '.git#branch=main'
+      except: []
+
+# Dependency management (if we add external proto imports in future)
+deps: []
