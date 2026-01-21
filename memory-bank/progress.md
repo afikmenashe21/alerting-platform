@@ -171,6 +171,7 @@
     - GitHub Actions workflow for CI validation
     - Pre-commit hooks for local validation
     - CI Fix (2026-01-21): Improved buf detection in Makefile to work with GitHub Actions buf-action by using `which` instead of `command -v`
+    - CI Fix (2026-01-21): Fixed proto verification script to use buf instead of protoc for consistency with proto-generate target, eliminating false negatives in CI
   - Severity enum alignment (2026-01-21):
     - Fixed severity type mismatch between protobuf enums and database strings
     - Changed protobuf enum values to match database format directly: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` (removed `SEVERITY_` prefix)

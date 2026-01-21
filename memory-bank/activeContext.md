@@ -18,7 +18,7 @@ In progress / Next:
 6) ✅ Centralized infrastructure management (Postgres, Kafka, Redis, Zookeeper)
 7) 🔄 UI Integration for alert-producer: Add HTTP API wrapper and UI component for generating alerts with optional manual config
 8) ✅ Protobuf Integration: All Kafka topics now use protobuf messages defined in `proto/*.proto` with generated Go types in `pkg/proto/`; JSON wire format for Kafka events has been fully removed.
-9) ✅ Protobuf Enhanced Tooling: Added buf linting, breaking change detection, code verification, CI/CD integration, and pre-commit hooks for robust schema management. CI buf detection fixed (2026-01-21).
+9) ✅ Protobuf Enhanced Tooling: Added buf linting, breaking change detection, code verification, CI/CD integration, and pre-commit hooks for robust schema management. CI buf detection fixed (2026-01-21). CI proto verification fixed (2026-01-21).
 10) ✅ Protobuf Severity Alignment: Changed protobuf enum values to match database format directly (LOW, MEDIUM, HIGH, CRITICAL - removed SEVERITY_ prefix) for simpler, cleaner code (2026-01-21).
 
 ## Code health
