@@ -192,8 +192,8 @@ go tool cover -html=coverage.out -o coverage.html
 
 3. **Check Redis snapshot:**
    ```bash
-   docker exec rule-updater-redis redis-cli GET rules:snapshot | jq .
-   docker exec rule-updater-redis redis-cli GET rules:version
+   docker exec alerting-platform-redis redis-cli GET rules:snapshot | jq .
+   docker exec alerting-platform-redis redis-cli GET rules:version
    ```
 
 4. **Verify the service logs** show the snapshot being rebuilt

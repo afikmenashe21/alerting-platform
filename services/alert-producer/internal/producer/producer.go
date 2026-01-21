@@ -11,16 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"alert-producer/internal/generator"
+	kafkautil "github.com/afikmenashe/alerting-platform/pkg/kafka"
 	pbalerts "github.com/afikmenashe/alerting-platform/pkg/proto/alerts"
 	pbcommon "github.com/afikmenashe/alerting-platform/pkg/proto/common"
+	"alert-producer/internal/generator"
 	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
-)
-
-const (
-	// writeTimeout is the maximum time to wait for a Kafka write operation
-	writeTimeout = 10 * time.Second
 )
 
 // AlertPublisher defines the interface for publishing alerts.
@@ -43,46 +39,40 @@ var _ AlertPublisher = (*Producer)(nil)
 // The producer is configured for at-least-once delivery semantics with synchronous writes.
 // It will attempt to create the topic if it doesn't exist (with 3 partitions, replication factor 1).
 func New(brokers string, topic string) (*Producer, error) {
-	if brokers == "" {
-		return nil, fmt.Errorf("brokers cannot be empty")
+	if err := kafkautil.ValidateProducerParams(brokers, topic); err != nil {
+		return nil, err
 	}
-	if topic == "" {
-		return nil, fmt.Errorf("topic cannot be empty")
-	}
-	
+
 	// Parse comma-separated broker list
-	brokerList := strings.Split(brokers, ",")
-	for i := range brokerList {
-		brokerList[i] = strings.TrimSpace(brokerList[i])
-	}
-	
+	brokerList := kafkautil.ParseBrokers(brokers)
+
 	slog.Info("Initializing Kafka producer",
 		"brokers", brokerList,
 		"topic", topic,
 	)
-	
+
 	// Try to create topic if it doesn't exist (best effort, may fail silently)
 	createTopicIfNotExists(brokerList[0], topic)
-	
+
 	// Configure Kafka writer for at-least-once delivery
 	// Use Hash balancer to partition by key (alert_id) for even distribution
 	writer := &kafka.Writer{
 		Addr:         kafka.TCP(brokerList...),
 		Topic:        topic,
 		Balancer:     &kafka.Hash{}, // Key-based partitioning (hashes the message key)
-		WriteTimeout: writeTimeout,
+		WriteTimeout: kafkautil.WriteTimeout,
 		RequiredAcks: kafka.RequireOne,   // At-least-once semantics (waits for leader ack)
 		Async:        false,              // Synchronous writes for reliability and error handling
 	}
-	
+
 	slog.Info("Kafka producer configured",
-		"write_timeout", writeTimeout,
+		"write_timeout", kafkautil.WriteTimeout,
 		"required_acks", "RequireOne",
 		"async", false,
 		"balancer", "Hash (key-based partitioning)",
 		"partition_key", "alert_id (hashed)",
 	)
-	
+
 	return &Producer{
 		writer: writer,
 		topic:  topic,

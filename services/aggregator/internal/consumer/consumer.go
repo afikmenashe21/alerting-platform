@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	kafkautil "github.com/afikmenashe/alerting-platform/pkg/kafka"
 	pbalerts "github.com/afikmenashe/alerting-platform/pkg/proto/alerts"
 	"aggregator/internal/events"
-	kafkautil "aggregator/internal/kafka"
 	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )

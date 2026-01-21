@@ -1,4 +1,4 @@
-// Package kafka provides shared Kafka utilities for the evaluator service.
+// Package kafka provides shared Kafka utilities for all services.
 package kafka
 
 import "time"

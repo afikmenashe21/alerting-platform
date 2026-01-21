@@ -3,6 +3,7 @@ module evaluator
 go 1.25.6
 
 require (
+	github.com/afikmenashe/alerting-platform/pkg/kafka v0.0.0
 	github.com/afikmenashe/alerting-platform/pkg/proto v0.0.0
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/segmentio/kafka-go v0.4.47
@@ -17,3 +18,5 @@ require (
 )
 
 replace github.com/afikmenashe/alerting-platform/pkg/proto => ../../pkg/proto
+
+replace github.com/afikmenashe/alerting-platform/pkg/kafka => ../../pkg/kafka

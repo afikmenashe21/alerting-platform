@@ -1,25 +1,15 @@
-// Package kafka provides shared Kafka utilities for the aggregator service.
+// Package kafka provides shared Kafka utilities for all services.
 package kafka
 
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/segmentio/kafka-go"
 )
 
-const (
-	// ReadTimeout is the maximum time to wait for a Kafka read operation.
-	ReadTimeout = 10 * time.Second
-	// CommitInterval is how often to commit offsets (after processing).
-	CommitInterval = 1 * time.Second
-	// WriteTimeout is the maximum time to wait for a Kafka write operation.
-	WriteTimeout = 10 * time.Second
-)
-
-// ParseBrokers parses a comma-separated broker string into a slice of broker addresses.
-// Trims whitespace from each broker address.
+// ParseBrokers parses a comma-separated broker list and trims whitespace.
+// Returns a slice of broker addresses.
 func ParseBrokers(brokers string) []string {
 	if brokers == "" {
 		return nil
@@ -59,7 +49,7 @@ func ValidateProducerParams(brokers, topic string) error {
 }
 
 // NewReaderConfig creates a standard Kafka reader configuration for at-least-once delivery.
-// This configuration is shared across all consumers in the aggregator service.
+// This configuration is shared across all consumers in the platform.
 func NewReaderConfig(brokers []string, topic, groupID string) kafka.ReaderConfig {
 	return kafka.ReaderConfig{
 		Brokers:        brokers,

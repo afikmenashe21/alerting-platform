@@ -5,19 +5,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
-	protorules "github.com/afikmenashe/alerting-platform/pkg/proto/rules"
+	kafkautil "github.com/afikmenashe/alerting-platform/pkg/kafka"
 	protocommon "github.com/afikmenashe/alerting-platform/pkg/proto/common"
+	protorules "github.com/afikmenashe/alerting-platform/pkg/proto/rules"
 	"rule-service/internal/events"
 	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
-)
-
-const (
-	// writeTimeout is the maximum time to wait for a Kafka write operation.
-	writeTimeout = 10 * time.Second
 )
 
 // Producer wraps a Kafka writer and provides a simple interface for publishing rule changed events.
@@ -29,18 +24,12 @@ type Producer struct {
 // NewProducer creates a new Kafka producer with the specified brokers and topic.
 // The producer is configured for at-least-once delivery semantics with synchronous writes.
 func NewProducer(brokers string, topic string) (*Producer, error) {
-	if brokers == "" {
-		return nil, fmt.Errorf("brokers cannot be empty")
-	}
-	if topic == "" {
-		return nil, fmt.Errorf("topic cannot be empty")
+	if err := kafkautil.ValidateProducerParams(brokers, topic); err != nil {
+		return nil, err
 	}
 
 	// Parse comma-separated broker list
-	brokerList := strings.Split(brokers, ",")
-	for i := range brokerList {
-		brokerList[i] = strings.TrimSpace(brokerList[i])
-	}
+	brokerList := kafkautil.ParseBrokers(brokers)
 
 	slog.Info("Initializing Kafka producer",
 		"brokers", brokerList,
@@ -56,13 +45,13 @@ func NewProducer(brokers string, topic string) (*Producer, error) {
 		Addr:         kafka.TCP(brokerList...),
 		Topic:        topic,
 		Balancer:     &kafka.Hash{}, // Key-based partitioning (hashes the message key)
-		WriteTimeout: writeTimeout,
+		WriteTimeout: kafkautil.WriteTimeout,
 		RequiredAcks: kafka.RequireOne, // At-least-once semantics (waits for leader ack)
 		Async:        false,            // Synchronous writes for reliability and error handling
 	}
 
 	slog.Info("Kafka producer configured",
-		"write_timeout", writeTimeout,
+		"write_timeout", kafkautil.WriteTimeout,
 		"required_acks", "RequireOne",
 		"async", false,
 		"balancer", "Hash (key-based partitioning)",

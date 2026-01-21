@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"time"
 
+	kafkautil "github.com/afikmenashe/alerting-platform/pkg/kafka"
 	pbalerts "github.com/afikmenashe/alerting-platform/pkg/proto/alerts"
 	pbcommon "github.com/afikmenashe/alerting-platform/pkg/proto/common"
 	"evaluator/internal/events"
-	kafkautil "evaluator/internal/kafka"
 	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )

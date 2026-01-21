@@ -286,11 +286,11 @@ For detailed troubleshooting information, see **[Troubleshooting Guide](docs/TRO
 
 **Service won't start:**
 - Check Docker is running: `docker ps`
-- Check Postgres is ready: `docker exec sender-postgres pg_isready -U postgres`
-- Check Kafka is ready: `docker exec sender-kafka kafka-broker-api-versions --bootstrap-server localhost:9092`
+- Check Postgres is ready: `docker exec alerting-platform-postgres pg_isready -U postgres`
+- Check Kafka is ready: `docker exec alerting-platform-kafka kafka-broker-api-versions --bootstrap-server localhost:9092`
 
 **No notifications being processed:**
-- Check Kafka topic exists: `docker exec sender-kafka kafka-topics --list --bootstrap-server localhost:9092`
+- Check Kafka topic exists: `docker exec alerting-platform-kafka kafka-topics --list --bootstrap-server localhost:9092`
 - Check notifications exist: `make db-query`
 - Check notifications have RECEIVED status: `make db-count`
 - Check service logs for errors

@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"time"
 
+	kafkautil "github.com/afikmenashe/alerting-platform/pkg/kafka"
 	pbnotifications "github.com/afikmenashe/alerting-platform/pkg/proto/notifications"
 	"aggregator/internal/events"
-	kafkautil "aggregator/internal/kafka"
 
 	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
