@@ -30,8 +30,8 @@ func main() {
 	var mockMode bool
 	var testMode bool
 	var singleTestMode bool
-	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", "localhost:9092", "Kafka broker addresses (comma-separated)")
-	flag.StringVar(&cfg.Topic, "topic", "alerts.new", "Kafka topic name")
+	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", getEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
+	flag.StringVar(&cfg.Topic, "topic", getEnvOrDefault("ALERTS_NEW_TOPIC", "alerts.new"), "Kafka topic name")
 	flag.Float64Var(&cfg.RPS, "rps", 10.0, "Alerts per second")
 	flag.DurationVar(&cfg.Duration, "duration", 60*time.Second, "Duration to run (e.g., 60s, 5m)")
 	flag.IntVar(&cfg.BurstSize, "burst", 0, "Burst mode: send N alerts immediately, then stop (0 = continuous)")
@@ -147,5 +147,13 @@ func main() {
 	}
 
 	slog.Info("Alert producer completed successfully")
+}
+
+// getEnvOrDefault returns the environment variable value or a default value if not set.
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 

@@ -18,13 +18,13 @@ import (
 )
 
 func main() {
-	// Parse command-line flags
+	// Parse command-line flags with environment variable fallbacks
 	cfg := &config.Config{}
-	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", "localhost:9092", "Kafka broker addresses (comma-separated)")
-	flag.StringVar(&cfg.RuleChangedTopic, "rule-changed-topic", "rule.changed", "Kafka topic for rule change events")
-	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", "rule-updater-group", "Kafka consumer group ID")
-	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable", "PostgreSQL connection string")
-	flag.StringVar(&cfg.RedisAddr, "redis-addr", "localhost:6379", "Redis server address")
+	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", getEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
+	flag.StringVar(&cfg.RuleChangedTopic, "rule-changed-topic", getEnvOrDefault("RULE_CHANGED_TOPIC", "rule.changed"), "Kafka topic for rule change events")
+	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", getEnvOrDefault("CONSUMER_GROUP_ID", "rule-updater-group"), "Kafka consumer group ID")
+	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", getEnvOrDefault("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable"), "PostgreSQL connection string")
+	flag.StringVar(&cfg.RedisAddr, "redis-addr", getEnvOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address")
 	flag.Parse()
 
 	// Set up structured logging
@@ -144,6 +144,14 @@ func rebuildSnapshot(ctx context.Context, db *database.DB, writer *snapshot.Writ
 	)
 
 	return nil
+}
+
+// getEnvOrDefault returns the environment variable value or a default value if not set.
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 // maskDSN masks sensitive information in the DSN for logging.

@@ -16,13 +16,13 @@ import (
 )
 
 func main() {
-	// Parse command-line flags
+	// Parse command-line flags with environment variable fallbacks
 	cfg := &config.Config{}
-	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", "localhost:9092", "Kafka broker addresses (comma-separated)")
-	flag.StringVar(&cfg.AlertsMatchedTopic, "alerts-matched-topic", "alerts.matched", "Kafka topic for matched alerts")
-	flag.StringVar(&cfg.NotificationsReadyTopic, "notifications-ready-topic", "notifications.ready", "Kafka topic for ready notifications")
-	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", "aggregator-group", "Kafka consumer group ID")
-	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable", "PostgreSQL connection string")
+	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", getEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
+	flag.StringVar(&cfg.AlertsMatchedTopic, "alerts-matched-topic", getEnvOrDefault("ALERTS_MATCHED_TOPIC", "alerts.matched"), "Kafka topic for matched alerts")
+	flag.StringVar(&cfg.NotificationsReadyTopic, "notifications-ready-topic", getEnvOrDefault("NOTIFICATIONS_READY_TOPIC", "notifications.ready"), "Kafka topic for ready notifications")
+	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", getEnvOrDefault("CONSUMER_GROUP_ID", "aggregator-group"), "Kafka consumer group ID")
+	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", getEnvOrDefault("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable"), "PostgreSQL connection string")
 	flag.Parse()
 
 	// Set up structured logging
@@ -97,6 +97,14 @@ func main() {
 	slog.Info("Aggregator service stopped")
 }
 
+
+// getEnvOrDefault returns the environment variable value or a default value if not set.
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
 
 // maskDSN masks sensitive information in the DSN for logging.
 func maskDSN(dsn string) string {

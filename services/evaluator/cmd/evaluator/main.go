@@ -23,15 +23,15 @@ import (
 )
 
 func main() {
-	// Parse command-line flags
+	// Parse command-line flags with environment variable fallbacks
 	cfg := &config.Config{}
-	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", "localhost:9092", "Kafka broker addresses (comma-separated)")
-	flag.StringVar(&cfg.AlertsNewTopic, "alerts-new-topic", "alerts.new", "Kafka topic for incoming alerts")
-	flag.StringVar(&cfg.AlertsMatchedTopic, "alerts-matched-topic", "alerts.matched", "Kafka topic for matched alerts")
-	flag.StringVar(&cfg.RuleChangedTopic, "rule-changed-topic", "rule.changed", "Kafka topic for rule change events")
-	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", "evaluator-group", "Kafka consumer group ID for alerts.new")
-	flag.StringVar(&cfg.RuleChangedGroupID, "rule-changed-group-id", "evaluator-rule-changed-group", "Kafka consumer group ID for rule.changed")
-	flag.StringVar(&cfg.RedisAddr, "redis-addr", "localhost:6379", "Redis server address")
+	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", getEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
+	flag.StringVar(&cfg.AlertsNewTopic, "alerts-new-topic", getEnvOrDefault("ALERTS_NEW_TOPIC", "alerts.new"), "Kafka topic for incoming alerts")
+	flag.StringVar(&cfg.AlertsMatchedTopic, "alerts-matched-topic", getEnvOrDefault("ALERTS_MATCHED_TOPIC", "alerts.matched"), "Kafka topic for matched alerts")
+	flag.StringVar(&cfg.RuleChangedTopic, "rule-changed-topic", getEnvOrDefault("RULE_CHANGED_TOPIC", "rule.changed"), "Kafka topic for rule change events")
+	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", getEnvOrDefault("CONSUMER_GROUP_ID", "evaluator-group"), "Kafka consumer group ID for alerts.new")
+	flag.StringVar(&cfg.RuleChangedGroupID, "rule-changed-group-id", getEnvOrDefault("RULE_CHANGED_GROUP_ID", "evaluator-rule-changed-group"), "Kafka consumer group ID for rule.changed")
+	flag.StringVar(&cfg.RedisAddr, "redis-addr", getEnvOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address")
 	flag.DurationVar(&cfg.VersionPollInterval, "version-poll-interval", 5*time.Second, "Interval for polling Redis version")
 	flag.Parse()
 
@@ -156,5 +156,13 @@ func main() {
 	}
 
 	slog.Info("Evaluator service stopped")
+}
+
+// getEnvOrDefault returns the environment variable value or a default value if not set.
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 

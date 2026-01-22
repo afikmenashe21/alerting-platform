@@ -1,0 +1,39 @@
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+memory-bank/
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+
+# Build artifacts
+*.log
+logs/
+
+# Test files
+*_test.go
+**/*_test.go
+
+# Local development
+.env
+.env.local
+docker-compose*.yml
+
+# CI/CD
+.github/
+
+# Frontend (not needed for Go services)
+rule-service-ui/
+node_modules/
+
+# Scripts (not needed in containers)
+scripts/
+
+# Migrations (handled separately)
+migrations/

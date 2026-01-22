@@ -2,7 +2,13 @@
 
 A multi-service Go application implementing an end-to-end alert notification platform with Kafka, Postgres, and Redis.
 
+**Status**: ✅ Deployed to AWS ECS - Production-ready MVP
+
 ## Quick Start
+
+**Production Deployment**: See [`docs/deployment/CURRENT_STATUS.md`](docs/deployment/CURRENT_STATUS.md) for AWS ECS deployment status and next steps.
+
+**Local Development**:
 
 ```bash
 # 1. Start all infrastructure and run all services (one command!)
@@ -44,21 +50,50 @@ All services are located in `services/`:
 
 See `memory-bank/projectbrief.md` for the complete architecture overview.
 
+## Production Deployment (AWS)
+
+Deploy to AWS ECS with Terraform:
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars - set db_password
+terraform init && terraform apply
+
+# Build and push Docker images
+./scripts/deployment/build-and-push.sh
+
+# Update ECS services
+./scripts/deployment/update-services.sh
+```
+
+See `docs/deployment/` for complete guides:
+- `QUICKSTART.md` - Deploy in 30 minutes
+- `PRODUCTION_DEPLOYMENT.md` - Full production guide
+- `PREREQUISITES.md` - Required tools and credentials
+- `ULTRA_LOW_COST.md` - Deploy for ~$5-10/month
+
 ## Documentation
 
 Documentation is organized in the `docs/` directory:
 
+- **Deployment** (`docs/deployment/`):
+  - `QUICKSTART.md` - 30-minute deployment guide
+  - `PRODUCTION_DEPLOYMENT.md` - Complete production guide
+  - `PREREQUISITES.md` - Tools and credentials setup
+  - `ULTRA_LOW_COST.md` - Ultra-low-cost configuration
+
 - **Guides** (`docs/guides/`):
-  - `SETUP.md` - Complete setup guide
+  - `SETUP.md` - Complete local setup guide
   - `QUICKSTART.md` - Quick start instructions
 
 - **Architecture** (`docs/architecture/`):
   - `INFRASTRUCTURE.md` - Infrastructure management details
-  - `MIGRATION_TO_CENTRALIZED.md` - Migration guide
+  - `PROTOBUF_INTEGRATION_STRATEGY.md` - Protobuf design
 
 - **Features** (`docs/features/`):
-  - `WILDCARD_RULES_DESIGN.md` - Wildcard rules design documentation
-  - `WILDCARD_RULES_USAGE.md` - Wildcard rules usage guide
+  - `WILDCARD_RULES_DESIGN.md` - Wildcard rules design
+  - `WILDCARD_RULES_USAGE.md` - Wildcard rules usage
 
 See `docs/README.md` for complete documentation index.
 
@@ -78,28 +113,32 @@ make run-all-bg         # Run all services in background
 
 ```
 alerting-platform/
-├── services/           # All services
+├── services/           # All services (with Dockerfiles)
 │   ├── rule-service/
 │   ├── rule-updater/
 │   ├── evaluator/
 │   ├── aggregator/
 │   ├── sender/
 │   └── alert-producer/
+├── terraform/         # AWS infrastructure (Terraform)
+│   ├── main.tf
+│   └── modules/       # VPC, ECS, RDS, Redis, Kafka, ALB
 ├── docs/              # Documentation
+│   ├── deployment/    # Production deployment guides
 │   ├── guides/        # Setup and quick start guides
-│   ├── architecture/  # Architecture and infrastructure docs
-│   └── features/      # Feature-specific documentation
+│   ├── architecture/  # Architecture docs
+│   └── features/      # Feature documentation
 ├── scripts/           # Centralized scripts
-│   ├── setup-infrastructure.sh
-│   ├── verify-dependencies.sh
-│   ├── run-migrations.sh
-│   ├── create-kafka-topics.sh
-│   └── run-all-services.sh
-├── migrations/        # Migration strategy documentation
+│   ├── infrastructure/  # Setup and verify scripts
+│   ├── migrations/      # DB migration scripts
+│   └── deployment/      # Build/push/update scripts
+├── migrations/        # Database schema (init-schema.sql)
 ├── memory-bank/       # Project memory bank (design decisions)
-├── rule-service-ui/  # React UI for rule-service
-├── docker-compose.yml # Centralized infrastructure
-└── Makefile          # Root-level commands
+├── proto/             # Protobuf definitions
+├── pkg/               # Shared Go packages
+├── rule-service-ui/   # React UI for rule-service
+├── docker-compose.yml # Local infrastructure
+└── Makefile           # Root-level commands
 ```
 
 ## Infrastructure

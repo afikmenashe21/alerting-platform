@@ -56,11 +56,12 @@ echo_info "Creating Kafka topics..."
 
 # Define all topics used by the platform
 # Format: topic_name:partitions:replication_factor
+# 9 partitions allows for better horizontal scaling (up to 9 consumer instances per service)
 TOPICS=(
-    "alerts.new:3:1"
-    "rule.changed:3:1"
-    "alerts.matched:3:1"
-    "notifications.ready:3:1"
+    "alerts.new:9:1"
+    "rule.changed:9:1"
+    "alerts.matched:9:1"
+    "notifications.ready:9:1"
 )
 
 for topic_spec in "${TOPICS[@]}"; do

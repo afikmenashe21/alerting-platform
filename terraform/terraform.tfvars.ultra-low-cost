@@ -1,0 +1,67 @@
+# Ultra-Low-Cost Configuration - Memory Optimized
+# Target: ~$15-20/month (t3.small required for Kafka/Zookeeper)
+# Suitable for: Development, testing, low-traffic production
+#
+# Memory Budget (1x t3.small = 2048 MB, ~1700 MB usable after ECS overhead):
+#   - Zookeeper: 192 MB (heap: 128 MB)
+#   - Kafka:     384 MB (heap: 256 MB)
+#   - Services:  6 x 180 MB = 1080 MB
+#   - Total:     ~1656 MB (fits with headroom)
+#
+# NOTE: t3.micro (1GB) does NOT have enough memory for Kafka + Zookeeper + services
+
+# Core Configuration
+project_name = "alerting-platform"
+environment  = "prod"
+aws_region   = "us-east-1"
+
+# Database Configuration
+# IMPORTANT: Change to a secure password!
+db_username = "postgres"
+db_password = "CHANGE_THIS_SECURE_PASSWORD"
+
+# Network Configuration
+vpc_cidr = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# ECS Configuration - SINGLE INSTANCE for lowest cost
+# t3.small (2GB RAM) is minimum required for Kafka/Zookeeper
+# Cost: ~$15/month (not free tier eligible)
+ecs_instance_type   = "t3.small"
+ecs_desired_capacity = 1              # Single instance for lowest cost
+ecs_min_size        = 1
+ecs_max_size        = 2               # Max 2 for emergencies
+
+# RDS Configuration - MINIMIZED
+# db.t3.micro with 20GB is FREE on free tier (750 hours/month)
+db_instance_class   = "db.t3.micro"  # Free tier eligible
+db_allocated_storage = 20             # Free tier eligible (up to 20GB)
+
+# Service Configuration - MINIMIZED
+# All services start with 1 instance, no auto-scaling
+service_desired_count = 1             # Start with 1
+service_max_count     = 1             # Don't auto-scale
+
+# Container Configuration - OPTIMIZED for single t3.small
+# Smaller containers to fit all services + Kafka/ZK on 1 instance
+container_cpu    = 128                # 0.125 vCPU
+container_memory = 180                # 180 MB per service (down from 256)
+
+# Kafka Configuration
+kafka_partitions         = 6          # Reduced from 9
+kafka_replication_factor = 1
+
+# Monitoring and Logging - MINIMIZED
+enable_container_insights = false     # Costs money
+log_retention_days       = 1          # Just 1 day (was 7)
+
+# Docker Image
+image_tag = "latest"
+
+# Tags
+tags = {
+  Project     = "alerting-platform"
+  Environment = "prod"
+  ManagedBy   = "terraform"
+  CostProfile = "ultra-low"
+}

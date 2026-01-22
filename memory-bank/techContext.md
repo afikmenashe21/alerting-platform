@@ -52,3 +52,16 @@
   - `alert_id`: provided by producer; else hash of `(severity,source,name,event_ts)`
   - `rule_id`: UUID from DB
   - `notification_id`: DB-generated
+
+## Production Deployment
+- **Platform**: AWS ECS with EC2 launch type
+- **Infrastructure as Code**: Terraform (see `terraform/`)
+- **Container Registry**: Amazon ECR
+- **Database**: RDS Postgres 15 (db.t3.micro free tier eligible)
+- **Cache**: ElastiCache Redis 7 (cache.t3.micro free tier eligible)
+- **Messaging**: Kafka on ECS (self-hosted, 9 partitions per topic)
+- **Load Balancer**: Application Load Balancer for public APIs
+- **Scaling**: Auto-scaling based on CPU/memory (1-3 instances per service)
+- **CI/CD**: GitHub Actions for automated deployments
+- **Monitoring**: CloudWatch Logs and Metrics
+- See `docs/deployment/PRODUCTION_DEPLOYMENT.md` for full guide

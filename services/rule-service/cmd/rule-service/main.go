@@ -20,12 +20,12 @@ import (
 )
 
 func main() {
-	// Parse command-line flags
+	// Parse command-line flags with environment variable fallbacks
 	cfg := &config.Config{}
-	flag.StringVar(&cfg.HTTPPort, "http-port", "8081", "HTTP server port")
-	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", "localhost:9092", "Kafka broker addresses (comma-separated)")
-	flag.StringVar(&cfg.RuleChangedTopic, "rule-changed-topic", "rule.changed", "Kafka topic for rule changed events")
-	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable", "PostgreSQL connection string")
+	flag.StringVar(&cfg.HTTPPort, "http-port", getEnvOrDefault("HTTP_PORT", "8081"), "HTTP server port")
+	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", getEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
+	flag.StringVar(&cfg.RuleChangedTopic, "rule-changed-topic", getEnvOrDefault("RULE_CHANGED_TOPIC", "rule.changed"), "Kafka topic for rule changed events")
+	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", getEnvOrDefault("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable"), "PostgreSQL connection string")
 	flag.Parse()
 
 	// Set up structured logging
@@ -110,6 +110,14 @@ func main() {
 	}
 
 	slog.Info("Rule-service stopped")
+}
+
+// getEnvOrDefault returns the environment variable value or a default value if not set.
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 // maskDSN masks sensitive information in the DSN for logging.

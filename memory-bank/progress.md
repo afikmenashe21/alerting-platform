@@ -16,6 +16,47 @@
 - [x] sender: consume notifications.ready + send via email (SMTP), Slack (webhook API), and webhook (HTTP POST) + update status
 - [x] alert-producer: generate alerts + load tests
 - [x] rule-service-ui: React UI for CRUD operations on clients, rules, and endpoints
+- [x] **Production AWS Deployment (2026-01-21)**:
+  - Terraform infrastructure for AWS ECS (EC2 launch type)
+  - Dockerfiles for all 6 services (multi-stage builds with Go 1.22)
+  - Docker images built and pushed to ECR
+  - Full AWS stack deployed: VPC, ECS cluster, RDS Postgres, ElastiCache Redis, self-hosted Kafka
+  - Ultra-low-cost configuration (~$15-20/month)
+  - Increased Kafka partitions from 3 to 9
+  - All 8 ECS services running
+  - Deployment scripts: build-and-push.sh, update-services.sh
+  - Comprehensive documentation in `docs/deployment/`
+  - **Database Migration Completed (2026-01-21)**:
+    - Created Docker-based migration solution (migrations/Dockerfile)
+    - Built and pushed migration image to ECR
+    - Ran as one-off ECS task with DB connection via environment variables
+    - Successfully created all 4 tables: clients, endpoints, notifications, rules
+    - Added SSM policy to ECS instance IAM role for future administrative access
+    - Migration script: scripts/deployment/run-migration.sh
+  - Note: Kafka topics still require initialization (9 partitions each)
+  - **Memory Optimization (2026-01-22)**:
+    - Fixed Kafka/Zookeeper memory issues causing OOM on t3.small
+    - Reduced Zookeeper: 384MB→192MB task, 256MB→128MB heap
+    - Reduced Kafka: 512MB→384MB task, 384MB→256MB heap
+    - Reduced service containers: 256MB→180MB each
+    - Total memory budget fits on single t3.small (~1656MB of 1700MB usable)
+    - Configuration allows running entire stack on 1 instance for lowest cost
+  - **Production Issues Resolved (2026-01-22)**:
+    - Issue 1 - Kafka-Zookeeper Connection (18:00 UTC): ✅ FIXED
+      - Restarted services in correct order
+      - All services connected and stable
+    - Issue 2 - Deployment Loop (20:50 UTC): ✅ FIXED
+      - Removed ECS Docker health checks (Alpine images missing wget)
+      - Updated task definition to revision 7
+      - All services now 1/1 tasks, deployments COMPLETED
+    - Key decisions: No ALB (cost savings), no health checks (not needed)
+    - Documentation: DEPLOYMENT_ANALYSIS.md, DEPLOYMENT_FIX_SUMMARY.md, QUICK_STATUS.md
+    - Kafka Topics: ✅ Created with 9 partitions (2026-01-22 19:13 UTC)
+  - **Kafka Topics Created (2026-01-22 19:13 UTC)**:
+    - All 4 topics created with 9 partitions for better parallelism
+    - Topics: alerts.new, rule.changed, alerts.matched, notifications.ready
+    - Used automated script: `increase-topic-partitions.sh`
+    - Platform now ready for end-to-end testing
 
 ## Code health
 - [x] rule-service: comprehensive code cleanup and modularization:
