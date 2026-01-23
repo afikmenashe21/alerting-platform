@@ -57,6 +57,25 @@
     - Topics: alerts.new, rule.changed, alerts.matched, notifications.ready
     - Used automated script: `increase-topic-partitions.sh`
     - Platform now ready for end-to-end testing
+  - **Production Testing Completed (2026-01-22 19:35 UTC)**:
+    - Created and ran production test scripts
+    - Fixed security group to allow ephemeral ports (32768-65535) for ECS dynamic port mappings
+    - Fixed task definition port mismatch (rule-service containerPort 8080 → 8081)
+    - Updated Terraform port configurations (rule-service: 8081, alert-producer: 8082)
+    - Verified all API endpoints: health, clients, rules, endpoints
+    - Successfully created test data: client, rule, endpoint
+    - Test script: `scripts/test/test-production.sh`
+    - **Result**: ✅ Production environment fully operational
+  - **Kafka Connectivity Fixed with DNS-Based Service Discovery (2026-01-22 20:10 UTC)**:
+    - **Problem**: Hardcoded IP addresses caused connection failures when Kafka moved instances
+    - **Solution**: Implemented AWS Cloud Map DNS-based service discovery
+    - Created service discovery service: `kafka.alerting-platform-prod.local`
+    - Combined Kafka + Zookeeper into single task (awsvpc mode)
+    - Updated Kafka advertised listeners to use DNS name (no hardcoded IP)
+    - Updated all consumer services (evaluator, rule-updater, aggregator, sender, rule-service) to use DNS
+    - Verified: All 4 consumer groups connected with 0 errors
+    - Documentation: `docs/deployment/KAFKA_FIX_SUMMARY.md`
+    - **Result**: ✅ Fully automated, zero-configuration Kafka connectivity that survives instance changes
 
 ## Code health
 - [x] rule-service: comprehensive code cleanup and modularization:

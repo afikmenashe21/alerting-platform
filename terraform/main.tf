@@ -137,7 +137,7 @@ module "rule_service" {
   ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
   
   container_image       = "${module.ecr.repository_urls["rule-service"]}:${var.image_tag}"
-  container_port        = 8080
+  container_port        = 8081  # rule-service listens on 8081
   container_cpu         = var.container_cpu
   container_memory      = var.container_memory
   
@@ -145,6 +145,7 @@ module "rule_service" {
   max_count             = var.service_max_count
   
   environment_variables = {
+    HTTP_PORT             = "8081"  # Explicitly set to match service code default
     KAFKA_BROKERS         = module.kafka.kafka_endpoint
     POSTGRES_DSN          = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
     RULE_CHANGED_TOPIC    = "rule.changed"
@@ -297,7 +298,7 @@ module "alert_producer" {
   ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
   
   container_image       = "${module.ecr.repository_urls["alert-producer"]}:${var.image_tag}"
-  container_port        = 8081
+  container_port        = 8082  # alert-producer-api listens on 8082
   container_cpu         = var.container_cpu
   container_memory      = var.container_memory
   

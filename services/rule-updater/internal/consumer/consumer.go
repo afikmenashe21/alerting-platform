@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	kafkautil "github.com/afikmenashe/alerting-platform/pkg/kafka"
+	protocommon "github.com/afikmenashe/alerting-platform/pkg/proto/common"
 	protorules "github.com/afikmenashe/alerting-platform/pkg/proto/rules"
 	"rule-updater/internal/events"
 	"github.com/segmentio/kafka-go"
@@ -17,6 +18,22 @@ import (
 type Consumer struct {
 	reader *kafka.Reader
 	topic  string
+}
+
+// fromProtoRuleAction converts a protobuf RuleAction enum to the simple action string.
+func fromProtoRuleAction(action protocommon.RuleAction) string {
+	switch action {
+	case protocommon.RuleAction_RULE_ACTION_CREATED:
+		return events.ActionCreated
+	case protocommon.RuleAction_RULE_ACTION_UPDATED:
+		return events.ActionUpdated
+	case protocommon.RuleAction_RULE_ACTION_DELETED:
+		return events.ActionDeleted
+	case protocommon.RuleAction_RULE_ACTION_DISABLED:
+		return events.ActionDisabled
+	default:
+		return ""
+	}
 }
 
 // NewConsumer creates a new Kafka consumer with the specified brokers, topic, and group ID.
@@ -69,7 +86,7 @@ func (c *Consumer) ReadMessage(ctx context.Context) (*events.RuleChanged, *kafka
 	ruleChanged := events.RuleChanged{
 		RuleID:        pb.RuleId,
 		ClientID:      pb.ClientId,
-		Action:        pb.Action.String(), // keep existing string-based action in local events
+		Action:        fromProtoRuleAction(pb.Action), // Convert protobuf enum to simple action string
 		Version:       int(pb.Version),
 		UpdatedAt:     pb.UpdatedAt,
 		SchemaVersion: int(pb.SchemaVersion),

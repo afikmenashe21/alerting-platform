@@ -19,8 +19,8 @@ func main() {
 	slog.SetDefault(logger)
 
 	var (
-		port              = flag.String("port", "8082", "HTTP server port")
-		defaultKafkaBrokers = flag.String("kafka-brokers", "localhost:9092", "Default Kafka broker addresses")
+		port              = flag.String("port", envOrDefault("PORT", "8082"), "HTTP server port")
+		defaultKafkaBrokers = flag.String("kafka-brokers", envOrDefault("KAFKA_BROKERS", "localhost:9092"), "Default Kafka broker addresses")
 	)
 	flag.Parse()
 
@@ -48,6 +48,14 @@ func main() {
 		slog.Error("Server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// envOrDefault reads an environment variable or returns a default value.
+func envOrDefault(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
 }
 
 // corsMiddleware adds CORS headers to allow requests from the UI.

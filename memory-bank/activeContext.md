@@ -98,16 +98,56 @@ Successfully ran database schema migration using Docker-based ECS task:
 - ✅ `scripts/deployment/kafka-topics-commands.sh` - Topic creation guide
 - ✅ `terraform/modules/ecs-service/main.tf` - Removed health checks
 
+### ✅ Production Testing Completed (2026-01-22 19:35 UTC)
+
+**Test Results**:
+- ✅ rule-service API accessible and functional
+- ✅ Client creation working
+- ✅ Rule creation working  
+- ✅ Endpoint creation working
+- ✅ All 7 core services running and stable
+
+**Issues Fixed During Testing**:
+1. ✅ Security group missing ephemeral port range (32768-65535) - Added for ECS dynamic port mappings
+2. ✅ Task definition port mismatch - Updated rule-service from containerPort 8080 to 8081
+3. ✅ Terraform port configuration - Updated main.tf to reflect correct service ports
+
+**Test Script**: `scripts/test/test-production-simple.sh`
+
+### ✅ Kafka Connectivity Fixed (2026-01-22 20:10 UTC)
+
+**Root Cause**: Hardcoded IP addresses in Kafka configuration - when Kafka moved instances (10.0.1.109 → 10.0.0.117 → 10.0.101.19), all consumer services failed to connect.
+
+**Solution Implemented**: AWS Cloud Map DNS-based service discovery
+- Service Discovery Namespace: `alerting-platform-prod.local` (ID: ns-jhsxaal5lpovw57m)
+- Kafka DNS Name: `kafka.alerting-platform-prod.local:9092` (A record, auto-updated)
+- Combined Kafka + Zookeeper into single task (ensures co-location, host network mode)
+- Updated Kafka advertised listeners: DNS name (not IP)
+- Updated all consumer services: DNS-based broker address
+
+**Results**:
+- ✅ All 4 consumer groups connected: evaluator-group, rule-updater-group, aggregator-group, sender-group
+- ✅ Zero Kafka connection errors across all services
+- ✅ DNS resolves to current IP automatically
+- ✅ No manual intervention needed for future instance changes
+
+**Architecture Changes**:
+- Deprecated: Standalone kafka and zookeeper ECS services (scaled to 0)
+- New: kafka-combined service (awsvpc mode, service discovery enabled)
+- Network: Kafka uses awsvpc mode for proper A record support
+- Services: evaluator (rev 9), rule-updater (rev 8), aggregator (rev 8), sender (rev 8), rule-service (rev 9)
+
+**Documentation**: `docs/deployment/KAFKA_FIX_SUMMARY.md`
+
 ### Next Steps
 1. ~~Create Kafka Topics~~ ✅ **COMPLETED** (2026-01-22 19:13 UTC)
+2. ~~Test End-to-End Flow~~ ✅ **COMPLETED** (2026-01-22 19:35 UTC)
 
-2. **Test End-to-End Flow** (READY):
-   - All infrastructure is ready
-   - All services are running
-   - Kafka topics configured with 9 partitions
-   - Create test client and rule
-   - Generate test alert
-   - Verify notifications
+3. **Full E2E Alert Processing Test** (READY):
+   - Scale up alert-producer
+   - Generate test alerts
+   - Verify alerts flow through: evaluator → aggregator → sender
+   - Check notifications in database
 
 3. **Long-term Improvements**:
    - Combine Kafka+Zookeeper into single task (prevent startup issues)

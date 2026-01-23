@@ -29,7 +29,7 @@ WORKDIR /app
 COPY --from=builder /app/alert-producer-api .
 
 # Expose port (alert-producer-api HTTP API)
-EXPOSE 8081
+EXPOSE 8082
 
 # Run as non-root user
 RUN adduser -D -u 10000 appuser
