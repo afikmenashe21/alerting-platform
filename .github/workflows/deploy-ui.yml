@@ -38,6 +38,7 @@ jobs:
       - name: Build with EC2 endpoints
         working-directory: rule-service-ui
         env:
+          VITE_BASE_PATH: /alerting-platform/
           VITE_RULE_SERVICE_URL: http://${{ inputs.ec2_ip }}:8081
           VITE_ALERT_PRODUCER_URL: http://${{ inputs.ec2_ip }}:8082
         run: npm run build
