@@ -327,33 +327,14 @@ module "alert_producer" {
 }
 
 # =============================================================================
-# API Gateway DISABLED - Using direct EC2 access instead (faster, simpler)
+# API Gateway HTTPS Proxy
 # =============================================================================
-# Services are exposed directly on EC2 public IP:
-# - rule-service: port 8081
-# - alert-producer: port 8082
-#
-# module "api_gateway" {
-#   source = "./modules/api-gateway"
-#
-#   project_name          = var.project_name
-#   environment           = var.environment
-#   vpc_id                = module.vpc.vpc_id
-#   private_subnet_ids    = module.vpc.private_subnet_ids
-#   ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
-#   ecs_cluster_name      = module.ecs_cluster.cluster_name
-#   aws_region            = var.aws_region
-#   log_retention_days    = var.log_retention_days
-#   cors_allowed_origins  = ["*"]
-# }
+# Provides HTTPS endpoint for GitHub Pages UI (mixed content fix)
+# Proxies requests to HTTP backend on Elastic IP
+module "api_gateway" {
+  source = "./modules/api-gateway-proxy"
 
-# =============================================================================
-# Static Site (DISABLED - CloudFront requires AWS account verification)
-# =============================================================================
-# UI will be deployed to GitHub Pages instead
-# module "static_site" {
-#   source = "./modules/static-site"
-#   project_name = var.project_name
-#   environment  = var.environment
-#   site_name    = "ui"
-# }
+  project_name = var.project_name
+  environment  = var.environment
+  backend_ip   = module.ecs_cluster.elastic_ip
+}

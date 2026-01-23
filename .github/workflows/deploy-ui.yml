@@ -3,8 +3,8 @@ name: Deploy UI to GitHub Pages
 on:
   workflow_dispatch:
     inputs:
-      ec2_ip:
-        description: 'EC2 Public IP (get from AWS console or terraform output)'
+      api_gateway_url:
+        description: 'API Gateway URL (from terraform output api_gateway_url)'
         required: true
         type: string
 
@@ -35,12 +35,11 @@ jobs:
         working-directory: rule-service-ui
         run: npm ci
 
-      - name: Build with EC2 endpoints
+      - name: Build with API Gateway URL
         working-directory: rule-service-ui
         env:
           VITE_BASE_PATH: /alerting-platform/
-          VITE_RULE_SERVICE_URL: http://${{ inputs.ec2_ip }}:8081
-          VITE_ALERT_PRODUCER_URL: http://${{ inputs.ec2_ip }}:8082
+          VITE_API_GATEWAY_URL: ${{ inputs.api_gateway_url }}
         run: npm run build
 
       - name: Upload artifact

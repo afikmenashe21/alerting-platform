@@ -39,17 +39,23 @@ output "kafka_endpoint" {
   value       = module.kafka.kafka_endpoint
 }
 
-# Stable Elastic IP for API access
+# Stable Elastic IP for direct API access (HTTP)
 output "api_elastic_ip" {
-  description = "Elastic IP for API access (stable, never changes)"
+  description = "Elastic IP for direct API access (stable, never changes)"
   value       = module.ecs_cluster.elastic_ip
 }
 
+# HTTPS API Gateway URL (for GitHub Pages UI)
+output "api_gateway_url" {
+  description = "HTTPS API Gateway URL - use this for GitHub Pages UI"
+  value       = module.api_gateway.api_endpoint
+}
+
 output "api_endpoints" {
-  description = "API endpoints for direct access"
+  description = "API endpoints"
   value = {
-    rule_service    = "http://${module.ecs_cluster.elastic_ip}:8081"
-    alert_producer  = "http://${module.ecs_cluster.elastic_ip}:8082"
+    https_gateway   = module.api_gateway.api_endpoint
+    http_direct     = "http://${module.ecs_cluster.elastic_ip}:8081"
   }
 }
 
