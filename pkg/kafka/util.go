@@ -55,9 +55,9 @@ func NewReaderConfig(brokers []string, topic, groupID string) kafka.ReaderConfig
 		Brokers:        brokers,
 		Topic:          topic,
 		GroupID:        groupID,
-		MinBytes:       10e3, // 10KB
+		MinBytes:       1,    // Return immediately when any data is available
 		MaxBytes:       10e6, // 10MB
-		MaxWait:        ReadTimeout,
+		MaxWait:        MaxPollWait,
 		CommitInterval: CommitInterval,
 		StartOffset:    kafka.FirstOffset, // Start from beginning if no committed offset
 	}

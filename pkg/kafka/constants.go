@@ -5,7 +5,11 @@ import "time"
 
 const (
 	// ReadTimeout is the maximum time to wait for a Kafka read operation.
+	// Kept at 10s as an upper bound for write operations and error scenarios.
 	ReadTimeout = 10 * time.Second
+	// MaxPollWait is how long a consumer waits when no data is available.
+	// Low value ensures sub-second message delivery through the pipeline.
+	MaxPollWait = 200 * time.Millisecond
 	// CommitInterval is how often to commit offsets (after processing).
 	CommitInterval = 1 * time.Second
 	// WriteTimeout is the maximum time to wait for a Kafka write operation.
