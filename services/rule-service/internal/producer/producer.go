@@ -48,6 +48,7 @@ func NewProducer(brokers string, topic string) (*Producer, error) {
 		WriteTimeout: kafkautil.WriteTimeout,
 		RequiredAcks: kafka.RequireOne, // At-least-once semantics (waits for leader ack)
 		Async:        false,            // Synchronous writes for reliability and error handling
+		BatchSize:    1,                // Flush immediately, no batching delay
 	}
 
 	slog.Info("Kafka producer configured",

@@ -61,8 +61,9 @@ func New(brokers string, topic string) (*Producer, error) {
 		Topic:        topic,
 		Balancer:     &kafka.Hash{}, // Key-based partitioning (hashes the message key)
 		WriteTimeout: kafkautil.WriteTimeout,
-		RequiredAcks: kafka.RequireOne,   // At-least-once semantics (waits for leader ack)
-		Async:        false,              // Synchronous writes for reliability and error handling
+		RequiredAcks: kafka.RequireOne, // At-least-once semantics (waits for leader ack)
+		Async:        false,            // Synchronous writes for reliability and error handling
+		BatchSize:    1,                // Flush immediately, no batching delay
 	}
 
 	slog.Info("Kafka producer configured",

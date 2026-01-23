@@ -150,6 +150,10 @@ resource "aws_ecs_service" "service" {
   desired_count   = var.desired_count
   launch_type     = "EC2"
 
+  # Host network mode: stop old task before starting new (can't share ports)
+  deployment_minimum_healthy_percent = 0
+  deployment_maximum_percent         = 100
+
   # network_configuration not needed for bridge/host mode - removed to fix deployment
 
   dynamic "load_balancer" {
