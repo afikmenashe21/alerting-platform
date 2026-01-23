@@ -19,12 +19,12 @@ resource "aws_apigatewayv2_api" "main" {
   }
 }
 
-# Integration for rule-service
+# Integration for rule-service (forwards full path)
 resource "aws_apigatewayv2_integration" "rule_service" {
   api_id             = aws_apigatewayv2_api.main.id
   integration_type   = "HTTP_PROXY"
   integration_method = "ANY"
-  integration_uri    = "http://${var.backend_ip}:8081/{proxy}"
+  integration_uri    = "http://${var.backend_ip}:8081"
 }
 
 # Integration for alert-producer
@@ -32,17 +32,17 @@ resource "aws_apigatewayv2_integration" "alert_producer" {
   api_id             = aws_apigatewayv2_api.main.id
   integration_type   = "HTTP_PROXY"
   integration_method = "ANY"
-  integration_uri    = "http://${var.backend_ip}:8082/{proxy}"
+  integration_uri    = "http://${var.backend_ip}:8082"
 }
 
-# Route: /api/* -> rule-service
+# Route: /api/* -> rule-service (path forwarded automatically)
 resource "aws_apigatewayv2_route" "rule_service" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /api/{proxy+}"
   target    = "integrations/${aws_apigatewayv2_integration.rule_service.id}"
 }
 
-# Route: /alert-producer-api/* -> alert-producer  
+# Route: /alert-producer-api/* -> alert-producer (rewrite path)
 resource "aws_apigatewayv2_route" "alert_producer" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /alert-producer-api/{proxy+}"

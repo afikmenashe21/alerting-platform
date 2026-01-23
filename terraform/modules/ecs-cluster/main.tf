@@ -192,8 +192,11 @@ resource "aws_launch_template" "ecs" {
     echo ECS_ENABLE_CONTAINER_METADATA=true >> /etc/ecs/ecs.config
     
     # Associate Elastic IP for stable public access
+    # Use network-interface-id to handle instances with multiple ENIs
     INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-    aws ec2 associate-address --instance-id $INSTANCE_ID --allocation-id ${aws_eip.ecs.id} --region ${data.aws_region.current.name}
+    MAC=$(curl -s http://169.254.169.254/latest/meta-data/mac)
+    ENI_ID=$(curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/$MAC/interface-id)
+    aws ec2 associate-address --network-interface-id $ENI_ID --allocation-id ${aws_eip.ecs.id} --region ${data.aws_region.current.name} --allow-reassociation
   EOF
   )
 
