@@ -275,12 +275,17 @@ module "sender" {
   max_count             = var.service_max_count
   
   environment_variables = {
-    KAFKA_BROKERS           = module.kafka.kafka_endpoint
-    POSTGRES_DSN            = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
+    KAFKA_BROKERS             = module.kafka.kafka_endpoint
+    POSTGRES_DSN              = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
     NOTIFICATIONS_READY_TOPIC = "notifications.ready"
-    CONSUMER_GROUP_ID       = "sender-group"
+    CONSUMER_GROUP_ID         = "sender-group"
+    SMTP_HOST                 = var.smtp_host
+    SMTP_PORT                 = var.smtp_port
+    SMTP_USER                 = var.smtp_user
+    SMTP_PASSWORD             = var.smtp_password
+    SMTP_FROM                 = var.smtp_from
   }
-  
+
   load_balancer_enabled = false
   log_retention_days    = var.log_retention_days
 }

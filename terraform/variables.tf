@@ -87,6 +87,38 @@ variable "db_allocated_storage" {
   default     = 20
 }
 
+# SMTP Configuration (for sender service)
+variable "smtp_host" {
+  description = "SMTP server hostname"
+  type        = string
+  default     = "smtp.gmail.com"
+}
+
+variable "smtp_port" {
+  description = "SMTP server port"
+  type        = string
+  default     = "587"
+}
+
+variable "smtp_user" {
+  description = "SMTP authentication username"
+  type        = string
+  default     = ""
+}
+
+variable "smtp_password" {
+  description = "SMTP authentication password"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "smtp_from" {
+  description = "Email FROM address for notifications"
+  type        = string
+  default     = ""
+}
+
 # Service Configuration
 variable "service_desired_count" {
   description = "Default desired count for each service (1 for minimal cost, can scale up)"
