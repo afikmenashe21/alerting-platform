@@ -1,63 +1,50 @@
-// Package email provides email notification sending via SMTP.
+// Package email provides email notification sending via AWS SES API.
 package email
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/smtp"
 	"os"
 	"strings"
-	"sync"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sesv2"
+	"github.com/aws/aws-sdk-go-v2/service/sesv2/types"
 
 	"sender/internal/database"
 	"sender/internal/sender/payload"
 )
 
-// Sender implements email notification sending via SMTP.
-// It maintains a persistent SMTP connection to avoid TLS handshake overhead per email.
+// Sender implements email notification sending via AWS SES API.
 type Sender struct {
-	smtpHost     string
-	smtpPort     string
-	smtpUser     string
-	smtpPassword string
-	smtpFrom     string
-	client       *smtp.Client
-	mu           sync.Mutex
+	client *sesv2.Client
+	from   string
+	region string
 }
 
-// Config holds SMTP configuration.
-type Config struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	From     string
-}
-
-// NewSender creates a new email sender with default configuration.
+// NewSender creates a new SES email sender.
 func NewSender() *Sender {
-	return NewSenderWithConfig(Config{
-		Host:     getEnvOrDefault("SMTP_HOST", "localhost"),
-		Port:     getEnvOrDefault("SMTP_PORT", "1025"),
-		User:     getEnvOrDefault("SMTP_USER", ""),
-		Password: getEnvOrDefault("SMTP_PASSWORD", ""),
-		From:     getEnvOrDefault("SMTP_FROM", "alerts@alerting-platform.local"),
-	})
-}
+	region := getEnvOrDefault("AWS_REGION", "us-east-1")
+	from := getEnvOrDefault("SMTP_FROM", getEnvOrDefault("SES_FROM", "alerts@alerting-platform.local"))
 
-// NewSenderWithConfig creates a new email sender with custom configuration.
-func NewSenderWithConfig(cfg Config) *Sender {
+	// Load AWS config (uses EC2 instance role credentials automatically)
+	cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
+	if err != nil {
+		slog.Error("Failed to load AWS config, SES sending will fail", "error", err)
+		return &Sender{from: from, region: region}
+	}
+
+	client := sesv2.NewFromConfig(cfg)
+	slog.Info("SES email sender initialized", "region", region, "from", from)
+
 	return &Sender{
-		smtpHost:     cfg.Host,
-		smtpPort:     cfg.Port,
-		smtpUser:     cfg.User,
-		smtpPassword: cfg.Password,
-		smtpFrom:     cfg.From,
+		client: client,
+		from:   from,
+		region: region,
 	}
 }
 
-// getEnvOrDefault gets an environment variable or returns a default value.
 func getEnvOrDefault(key, defaultValue string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
@@ -70,8 +57,7 @@ func (s *Sender) Type() string {
 	return "email"
 }
 
-// Send sends an email notification via SMTP using a persistent connection.
-// The endpointValue should be a comma-separated list of email addresses.
+// Send sends an email notification via AWS SES API.
 func (s *Sender) Send(ctx context.Context, endpointValue string, notification *database.Notification) error {
 	if endpointValue == "" {
 		return fmt.Errorf("email recipient is required")
@@ -88,31 +74,49 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 		}
 	}
 
-	emailPayload := payload.BuildEmailPayload(notification)
-
-	actualFrom := s.smtpFrom
-	if strings.Contains(s.smtpHost, "gmail.com") && s.smtpUser != "" {
-		actualFrom = s.smtpUser
+	if s.client == nil {
+		return fmt.Errorf("SES client not initialized")
 	}
 
-	msg := buildEmailMessage(actualFrom, recipients, emailPayload.Subject, emailPayload.Body)
+	emailPayload := payload.BuildEmailPayload(notification)
 
-	// Use persistent SMTP connection (avoids TLS handshake per email)
-	if err := s.sendEmail(actualFrom, recipients, msg); err != nil {
-		slog.Error("Failed to send email",
+	// Build SES SendEmail request
+	toAddresses := make([]string, len(recipients))
+	copy(toAddresses, recipients)
+
+	input := &sesv2.SendEmailInput{
+		FromEmailAddress: &s.from,
+		Destination: &types.Destination{
+			ToAddresses: toAddresses,
+		},
+		Content: &types.EmailContent{
+			Simple: &types.Message{
+				Subject: &types.Content{
+					Data: &emailPayload.Subject,
+				},
+				Body: &types.Body{
+					Text: &types.Content{
+						Data: &emailPayload.Body,
+					},
+				},
+			},
+		},
+	}
+
+	_, err := s.client.SendEmail(ctx, input)
+	if err != nil {
+		slog.Error("Failed to send email via SES",
 			"error", err,
-			"smtp_server", fmt.Sprintf("%s:%s", s.smtpHost, s.smtpPort),
 			"to", strings.Join(recipients, ", "),
 			"notification_id", notification.NotificationID,
 		)
-		return fmt.Errorf("failed to send email: %w", err)
+		return fmt.Errorf("SES send failed: %w", err)
 	}
 
-	slog.Info("Successfully sent email notification",
-		"from", actualFrom,
+	slog.Info("Successfully sent email via SES",
+		"from", s.from,
 		"to", strings.Join(recipients, ", "),
 		"subject", emailPayload.Subject,
-		"smtp_server", fmt.Sprintf("%s:%s", s.smtpHost, s.smtpPort),
 		"notification_id", notification.NotificationID,
 		"alert_id", notification.AlertID,
 		"client_id", notification.ClientID,
@@ -121,7 +125,15 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 	return nil
 }
 
-// Close closes the persistent SMTP connection.
-func (s *Sender) Close() {
-	s.closeSMTP()
+// parseRecipients splits a comma-separated list of email addresses.
+func parseRecipients(value string) []string {
+	parts := strings.Split(value, ",")
+	var recipients []string
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			recipients = append(recipients, trimmed)
+		}
+	}
+	return recipients
 }

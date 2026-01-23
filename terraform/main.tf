@@ -282,12 +282,23 @@ module "sender" {
     POSTGRES_DSN              = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
     NOTIFICATIONS_READY_TOPIC = "notifications.ready"
     CONSUMER_GROUP_ID         = "sender-group"
-    SMTP_HOST                 = var.smtp_host
-    SMTP_PORT                 = var.smtp_port
-    SMTP_USER                 = var.smtp_user
-    SMTP_PASSWORD             = var.smtp_password
-    SMTP_FROM                 = var.smtp_from
+    AWS_REGION                = var.aws_region
+    SES_FROM                  = var.smtp_from
   }
+
+  task_role_policy_json = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 
   load_balancer_enabled = false
   log_retention_days    = var.log_retention_days

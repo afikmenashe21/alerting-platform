@@ -114,3 +114,9 @@ variable "enable_service_discovery" {
   type        = bool
   default     = false
 }
+
+variable "task_role_policy_json" {
+  description = "Optional inline IAM policy JSON for the task role"
+  type        = string
+  default     = ""
+}

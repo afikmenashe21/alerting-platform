@@ -60,6 +60,14 @@ resource "aws_iam_role" "task_role" {
   }
 }
 
+# Optional inline policy for the task role (e.g., SES permissions for sender)
+resource "aws_iam_role_policy" "task_role_policy" {
+  count  = var.task_role_policy_json != "" ? 1 : 0
+  name   = "${var.project_name}-${var.environment}-${var.service_name}-task-policy"
+  role   = aws_iam_role.task_role.id
+  policy = var.task_role_policy_json
+}
+
 # Convert environment variables map to list format for ECS
 locals {
   environment_list = [

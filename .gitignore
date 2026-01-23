@@ -49,3 +49,5 @@ temp/
 *.tfstate.*
 .terraform.tfstate.lock.info
 crash.log
+terraform.tfvars
+*.auto.tfvars
