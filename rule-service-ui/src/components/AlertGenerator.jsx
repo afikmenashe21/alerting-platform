@@ -17,8 +17,6 @@ function AlertGenerator() {
     severity_dist: 'HIGH:30,MEDIUM:30,LOW:25,CRITICAL:15',
     source_dist: 'api:25,db:20,cache:15,monitor:15,queue:10,worker:5,frontend:5,backend:5',
     name_dist: 'timeout:15,error:15,crash:10,slow:10,memory:10,cpu:10,disk:10,network:10,auth:5,validation:5',
-    kafka_brokers: '',  // Leave empty to use server default
-    topic: 'alerts.new',
     mock: false,
     test: false,
     single_test: false,
@@ -164,13 +162,7 @@ function AlertGenerator() {
         presetConfig.name_dist = config.name_dist.trim();
       }
       
-      // Always include Kafka settings if configured
-      if (config.kafka_brokers && config.kafka_brokers.trim() !== '') {
-        presetConfig.kafka_brokers = config.kafka_brokers.trim();
-      }
-      if (config.topic && config.topic.trim() !== '') {
-        presetConfig.topic = config.topic.trim();
-      }
+      // Kafka settings managed by server - not included in request
       
       // Include seed if configured
       if (config.seed !== null && config.seed !== '' && !isNaN(parseInt(config.seed))) {
@@ -259,13 +251,7 @@ function AlertGenerator() {
         }
       }
       
-      // Kafka settings: only include if non-empty
-      if (config.kafka_brokers && config.kafka_brokers.trim() !== '') {
-        requestConfig.kafka_brokers = config.kafka_brokers.trim();
-      }
-      if (config.topic && config.topic.trim() !== '') {
-        requestConfig.topic = config.topic.trim();
-      }
+      // Kafka settings managed by server - not included in request
       
       console.log('Sending request config:', requestConfig);
       
@@ -520,26 +506,7 @@ function AlertGenerator() {
                   placeholder="timeout:15,error:15,..."
                 />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label>Kafka Brokers:</label>
-                  <input
-                    type="text"
-                    value={config.kafka_brokers}
-                    onChange={(e) => setConfig({ ...config, kafka_brokers: e.target.value })}
-                    disabled={loading || activeJob}
-                  />
-                </div>
-                <div>
-                  <label>Topic:</label>
-                  <input
-                    type="text"
-                    value={config.topic}
-                    onChange={(e) => setConfig({ ...config, topic: e.target.value })}
-                    disabled={loading || activeJob}
-                  />
-                </div>
-              </div>
+              {/* Kafka settings removed - managed by server configuration */}
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <label>
                   <input
