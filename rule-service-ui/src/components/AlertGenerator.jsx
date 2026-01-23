@@ -17,7 +17,7 @@ function AlertGenerator() {
     severity_dist: 'HIGH:30,MEDIUM:30,LOW:25,CRITICAL:15',
     source_dist: 'api:25,db:20,cache:15,monitor:15,queue:10,worker:5,frontend:5,backend:5',
     name_dist: 'timeout:15,error:15,crash:10,slow:10,memory:10,cpu:10,disk:10,network:10,auth:5,validation:5',
-    kafka_brokers: 'localhost:9092',
+    kafka_brokers: '',  // Leave empty to use server default
     topic: 'alerts.new',
     mock: false,
     test: false,
