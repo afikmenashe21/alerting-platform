@@ -3,6 +3,7 @@ package kafka
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/segmentio/kafka-go"
@@ -46,6 +47,37 @@ func ValidateProducerParams(brokers, topic string) error {
 		return fmt.Errorf("topic cannot be empty")
 	}
 	return nil
+}
+
+// ReaderConfigValues holds the actual values used in the reader config for logging.
+type ReaderConfigValues struct {
+	MinBytes       int
+	MaxBytes       int
+	MaxWait        string
+	CommitInterval string
+}
+
+// GetReaderConfigValues returns the actual configuration values for logging purposes.
+// This ensures services log the correct centralized values.
+func GetReaderConfigValues() ReaderConfigValues {
+	return ReaderConfigValues{
+		MinBytes:       1,
+		MaxBytes:       10e6,
+		MaxWait:        MaxPollWait.String(),
+		CommitInterval: CommitInterval.String(),
+	}
+}
+
+// LogReaderConfig logs the reader configuration values.
+// Call this after creating a reader to log the actual config being used.
+func LogReaderConfig() {
+	cfg := GetReaderConfigValues()
+	slog.Info("Kafka consumer configured",
+		"min_bytes", cfg.MinBytes,
+		"max_bytes", cfg.MaxBytes,
+		"max_wait", cfg.MaxWait,
+		"commit_interval", cfg.CommitInterval,
+	)
 }
 
 // NewReaderConfig creates a standard Kafka reader configuration for at-least-once delivery.

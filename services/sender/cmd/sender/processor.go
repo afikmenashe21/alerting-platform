@@ -70,7 +70,12 @@ func processOne(ctx context.Context, db *database.DB, notifSender *sender.Sender
 		return
 	}
 
-	if notification.Status == "SENT" {
+	// Skip if already processed (idempotency check)
+	if notification.Status == "SENT" || notification.Status == "FAILED" {
+		slog.Debug("Notification already processed, skipping",
+			"notification_id", ready.NotificationID,
+			"status", notification.Status,
+		)
 		if err := kafkaConsumer.CommitMessage(ctx, msg); err != nil {
 			slog.Error("Failed to commit offset", "error", err)
 		}
@@ -85,6 +90,28 @@ func processOne(ctx context.Context, db *database.DB, notifSender *sender.Sender
 
 	if err := notifSender.SendNotification(ctx, notification, endpoints); err != nil {
 		slog.Error("Failed to send notification", "notification_id", ready.NotificationID, "error", err)
+
+		// Mark as FAILED (dead letter queue pattern - notification can be retried later)
+		if updateErr := db.UpdateNotificationStatus(ctx, ready.NotificationID, "FAILED"); updateErr != nil {
+			slog.Error("Failed to mark notification as failed",
+				"notification_id", ready.NotificationID,
+				"error", updateErr,
+			)
+			// Don't commit - will retry on redelivery
+			return
+		}
+
+		slog.Warn("Notification marked as FAILED (DLQ)",
+			"notification_id", ready.NotificationID,
+			"alert_id", ready.AlertID,
+			"client_id", ready.ClientID,
+			"error", err,
+		)
+
+		// Commit offset - we've handled this notification (by marking it failed)
+		if err := kafkaConsumer.CommitMessage(ctx, msg); err != nil {
+			slog.Error("Failed to commit offset", "error", err)
+		}
 		return
 	}
 

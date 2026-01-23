@@ -40,12 +40,8 @@ func NewConsumer(brokers string, topic string, groupID string) (*Consumer, error
 	// Using FirstOffset ensures we read all messages when starting fresh
 	reader := kafka.NewReader(kafkautil.NewReaderConfig(brokerList, topic, groupID))
 
-	slog.Info("Kafka consumer configured",
-		"min_bytes", 10e3,
-		"max_bytes", 10e6,
-		"max_wait", kafkautil.ReadTimeout,
-		"commit_interval", kafkautil.CommitInterval,
-	)
+	// Log config from centralized source
+	kafkautil.LogReaderConfig()
 
 	return &Consumer{
 		reader: reader,

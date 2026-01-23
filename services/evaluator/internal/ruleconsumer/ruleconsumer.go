@@ -54,12 +54,8 @@ func NewConsumer(brokers string, topic string, groupID string) (*Consumer, error
 	// Configure Kafka reader for at-least-once delivery
 	reader := kafka.NewReader(kafkautil.NewReaderConfig(brokerList, topic, groupID))
 
-	slog.Info("Rule.changed consumer configured",
-		"min_bytes", 10e3,
-		"max_bytes", 10e6,
-		"max_wait", kafkautil.ReadTimeout,
-		"commit_interval", kafkautil.CommitInterval,
-	)
+	// Log config from centralized source
+	kafkautil.LogReaderConfig()
 
 	return &Consumer{
 		reader: reader,

@@ -40,7 +40,7 @@ func (p *Processor) ProcessAlerts(ctx context.Context) error {
 			return nil
 		default:
 			// Read alert from Kafka
-			alert, _, err := p.consumer.ReadMessage(ctx)
+			alert, msg, err := p.consumer.ReadMessage(ctx)
 			if err != nil {
 				// Check if context was cancelled
 				if ctx.Err() != nil {
@@ -61,6 +61,9 @@ func (p *Processor) ProcessAlerts(ctx context.Context) error {
 			// Match alert against rules
 			matches := p.matcher.Match(alert.Severity, alert.Source, alert.Name)
 
+			// Track if all publishes succeeded for commit decision
+			allPublishesSucceeded := true
+
 			// Publish one message per client_id
 			if len(matches) > 0 {
 				for clientID, ruleIDs := range matches {
@@ -74,7 +77,8 @@ func (p *Processor) ProcessAlerts(ctx context.Context) error {
 							"client_id", clientID,
 							"error", err,
 						)
-						// Continue processing other clients - Kafka will retry on next read
+						allPublishesSucceeded = false
+						// Continue processing other clients
 						continue
 					}
 
@@ -85,7 +89,7 @@ func (p *Processor) ProcessAlerts(ctx context.Context) error {
 					)
 				}
 			} else {
-				slog.Info("No rules matched alert",
+				slog.Debug("No rules matched alert",
 					"alert_id", alert.AlertID,
 					"severity", alert.Severity,
 					"source", alert.Source,
@@ -93,8 +97,20 @@ func (p *Processor) ProcessAlerts(ctx context.Context) error {
 				)
 			}
 
-			// Message is committed automatically by kafka-go after processing
-			// (CommitInterval is set in consumer config)
+			// Commit offset only after all publishes succeeded (or no matches)
+			// This ensures at-least-once semantics: if we crash before commit, Kafka will redeliver
+			if allPublishesSucceeded {
+				if err := p.consumer.CommitMessage(ctx, msg); err != nil {
+					slog.Error("Failed to commit offset",
+						"alert_id", alert.AlertID,
+						"error", err,
+					)
+				}
+			} else {
+				slog.Warn("Skipping offset commit due to publish failures, message will be redelivered",
+					"alert_id", alert.AlertID,
+				)
+			}
 		}
 	}
 }

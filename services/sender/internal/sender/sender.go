@@ -10,6 +10,7 @@ import (
 
 	"sender/internal/database"
 	"sender/internal/sender/email"
+	"sender/internal/sender/retry"
 	"sender/internal/sender/slack"
 	"sender/internal/sender/strategy"
 	"sender/internal/sender/webhook"
@@ -73,7 +74,15 @@ func (s *Sender) SendNotification(ctx context.Context, notification *database.No
 
 		totalEndpoints += len(endpointValues)
 		for _, endpointValue := range endpointValues {
-			if err := sender.Send(ctx, endpointValue, notification); err != nil {
+			// Use retry with exponential backoff for transient failures
+			retryCfg := retry.DefaultConfig()
+			operation := fmt.Sprintf("send_%s_%s", endpointType, notification.NotificationID)
+
+			err := retry.WithRetry(ctx, retryCfg, operation, func() error {
+				return sender.Send(ctx, endpointValue, notification)
+			})
+
+			if err != nil {
 				errors = append(errors, fmt.Sprintf("%s (%s): %s", endpointType, endpointValue, err.Error()))
 			} else {
 				successfulSends++
