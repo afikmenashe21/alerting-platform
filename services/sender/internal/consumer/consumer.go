@@ -41,9 +41,9 @@ func NewConsumer(brokers string, topic string, groupID string) (*Consumer, error
 	reader := kafka.NewReader(kafkautil.NewReaderConfig(brokerList, topic, groupID))
 
 	slog.Info("Kafka consumer configured",
-		"min_bytes", 10e3,
+		"min_bytes", 1,
 		"max_bytes", 10e6,
-		"max_wait", kafkautil.ReadTimeout,
+		"max_wait", kafkautil.MaxPollWait,
 		"commit_interval", kafkautil.CommitInterval,
 	)
 
