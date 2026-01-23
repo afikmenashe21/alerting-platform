@@ -7,20 +7,23 @@ import (
 	"log/slog"
 	"net/smtp"
 	"os"
-	"strconv"
 	"strings"
+	"sync"
 
 	"sender/internal/database"
 	"sender/internal/sender/payload"
 )
 
 // Sender implements email notification sending via SMTP.
+// It maintains a persistent SMTP connection to avoid TLS handshake overhead per email.
 type Sender struct {
 	smtpHost     string
 	smtpPort     string
 	smtpUser     string
 	smtpPassword string
 	smtpFrom     string
+	client       *smtp.Client
+	mu           sync.Mutex
 }
 
 // Config holds SMTP configuration.
@@ -67,80 +70,41 @@ func (s *Sender) Type() string {
 	return "email"
 }
 
-// Send sends an email notification via SMTP.
+// Send sends an email notification via SMTP using a persistent connection.
 // The endpointValue should be a comma-separated list of email addresses.
 func (s *Sender) Send(ctx context.Context, endpointValue string, notification *database.Notification) error {
 	if endpointValue == "" {
 		return fmt.Errorf("email recipient is required")
 	}
 
-	// Parse recipients (comma-separated)
 	recipients := parseRecipients(endpointValue)
 	if len(recipients) == 0 {
 		return fmt.Errorf("no valid email recipients provided")
 	}
 
-	// Basic validation: check for @ symbol in email addresses
 	for _, recipient := range recipients {
 		if !strings.Contains(recipient, "@") {
 			return fmt.Errorf("invalid email address format: %q (missing @ symbol)", recipient)
 		}
 	}
 
-	// Build email content
 	emailPayload := payload.BuildEmailPayload(notification)
 
-	// For Gmail, FROM address must match authenticated user
-	// We'll use the authenticated user as FROM in the SMTP envelope
-	// but can use a different display name in the email headers
 	actualFrom := s.smtpFrom
 	if strings.Contains(s.smtpHost, "gmail.com") && s.smtpUser != "" {
-		// Gmail requires envelope FROM to match authenticated user
 		actualFrom = s.smtpUser
-		if !strings.EqualFold(s.smtpFrom, s.smtpUser) {
-			slog.Info("Gmail: Using authenticated user as FROM address",
-				"authenticated_user", s.smtpUser,
-				"configured_from", s.smtpFrom,
-			)
-		}
 	}
 
-	// Build email message
 	msg := buildEmailMessage(actualFrom, recipients, emailPayload.Subject, emailPayload.Body)
 
-	// Connect to SMTP server
-	addr := fmt.Sprintf("%s:%s", s.smtpHost, s.smtpPort)
-	port, err := strconv.Atoi(s.smtpPort)
-	if err != nil {
-		return fmt.Errorf("invalid SMTP port: %s", s.smtpPort)
-	}
-
-	// For Gmail and other providers that require TLS, use custom connection
-	// Port 587 uses STARTTLS, port 465 uses SSL/TLS
-	if port == 587 || port == 465 {
-		// Use TLS connection for Gmail and similar providers
-		err = s.sendWithTLS(addr, port, actualFrom, recipients, msg)
-	} else {
-		// Use standard SMTP for local servers (like MailHog)
-		var auth smtp.Auth
-		if s.smtpUser != "" && s.smtpPassword != "" {
-			auth = smtp.PlainAuth("", s.smtpUser, s.smtpPassword, s.smtpHost)
-		}
-		err = smtp.SendMail(addr, auth, actualFrom, recipients, msg)
-	}
-	if err != nil {
+	// Use persistent SMTP connection (avoids TLS handshake per email)
+	if err := s.sendEmail(actualFrom, recipients, msg); err != nil {
 		slog.Error("Failed to send email",
 			"error", err,
 			"smtp_server", fmt.Sprintf("%s:%s", s.smtpHost, s.smtpPort),
 			"to", strings.Join(recipients, ", "),
 			"notification_id", notification.NotificationID,
 		)
-		
-		// Provide helpful error message for connection issues
-		if strings.Contains(err.Error(), "connection refused") {
-			return fmt.Errorf("failed to send email: %w (SMTP server at %s:%s is not available. Start an SMTP server or configure SMTP_HOST/SMTP_PORT)", err, s.smtpHost, s.smtpPort)
-		}
-		
 		return fmt.Errorf("failed to send email: %w", err)
 	}
 
@@ -153,12 +117,11 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 		"alert_id", notification.AlertID,
 		"client_id", notification.ClientID,
 	)
-	
-	// Provide helpful note for Gmail
-	if strings.Contains(s.smtpHost, "gmail.com") {
-		slog.Info("Gmail email sent. Check recipient's inbox and spam folder. Emails may take a few minutes to arrive.")
-		slog.Info("If email not in sent folder, Gmail may have rejected it. Check Gmail security activity.")
-	}
 
 	return nil
+}
+
+// Close closes the persistent SMTP connection.
+func (s *Sender) Close() {
+	s.closeSMTP()
 }
