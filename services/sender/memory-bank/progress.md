@@ -101,10 +101,18 @@ internal/sender/
   - Improved separation of concerns: connection management, notification operations, and endpoint operations
   - All tests pass; behavior unchanged
 
+## AWS SES Migration (2026-01-23)
+- [x] Migrated email sender from SMTP to AWS SES API
+- [x] Using AWS SDK Go v2 (sesv2) for email delivery
+- [x] IAM permissions added via task_role_policy_json in Terraform
+- [x] Environment variables: AWS_REGION, SES_FROM (removed SMTP_*)
+- [x] SES email identity verified in sandbox mode
+- [x] Build requirement: `--platform linux/amd64` for ECS EC2
+
 ## Future Enhancements
 - Retry logic with exponential backoff for failed sends
 - Rate limiting per client/endpoint
 - Dead letter queue for persistently failed sends
 - Metrics and observability (success/failure rates per endpoint type)
-- Support for additional email providers (SendGrid, SES) as alternatives to SMTP
+- Request SES production access (currently in sandbox)
 - Support for Slack Block Kit for richer message formatting

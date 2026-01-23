@@ -210,6 +210,17 @@
   - Preset configurations and manual configuration options
   - See `services/alert-producer/memory-bank/` for detailed design
 
+- **Sender SMTP to SES Migration (2026-01-23)**: Switched sender from SMTP to AWS SES API
+  - Replaced SMTP email sender with AWS SES SDK v2 (sesv2)
+  - Added IAM policy for SES:SendEmail and SES:SendRawEmail permissions
+  - Updated Terraform: task_role_policy_json variable in ECS module
+  - Updated Dockerfile to Go 1.23
+  - Removed SMTP environment variables, added AWS_REGION and SES_FROM
+  - SES email identity verified: `alert.system.notify.email@gmail.com`
+  - Note: SES still in sandbox mode (productionAccess: false)
+  - Fixed Kafka consumer log values to show actual config (min_bytes=1, max_wait=200ms)
+  - Important: Must build with `--platform linux/amd64` for ECS EC2 instances
+
 - **UI Production Deployment (2026-01-23)**: Free-tier deployment for rule-service-ui
   - GitHub Pages for static site hosting (free)
   - Direct EC2 access via Elastic IP (no Lambda/API Gateway needed)

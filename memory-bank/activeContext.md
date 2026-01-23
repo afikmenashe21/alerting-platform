@@ -198,6 +198,7 @@ Deployed free-tier infrastructure for rule-service-ui:
 ## Next Steps
 1) ✅ UI deployed to GitHub Pages
 2) ✅ Backend accessible via Elastic IP
+3) ✅ Sender service migrated from SMTP to AWS SES API (2026-01-23)
 
 ## Code health
 - Completed comprehensive cleanup and modularization across all services:
