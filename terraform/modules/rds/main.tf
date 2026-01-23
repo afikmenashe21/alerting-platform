@@ -39,7 +39,7 @@ resource "aws_security_group" "rds" {
 resource "aws_db_instance" "postgres" {
   identifier     = "${var.project_name}-${var.environment}-postgres"
   engine         = "postgres"
-  engine_version = "15"  # Let AWS use the latest 15.x version
+  engine_version = "15" # Let AWS use the latest 15.x version
 
   instance_class    = var.db_instance_class
   allocated_storage = var.allocated_storage
@@ -55,7 +55,7 @@ resource "aws_db_instance" "postgres" {
   publicly_accessible    = false
 
   # Backups (reduced for free tier compatibility)
-  backup_retention_period = 1  # Free tier allows up to 1 day
+  backup_retention_period = 1 # Free tier allows up to 1 day
   backup_window           = "03:00-04:00"
   maintenance_window      = "mon:04:00-mon:05:00"
 

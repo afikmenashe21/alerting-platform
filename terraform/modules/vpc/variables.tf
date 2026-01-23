@@ -21,5 +21,5 @@ variable "availability_zones" {
 variable "create_nat_gateway" {
   description = "Create NAT gateway for private subnets (costs ~$32/month, disable to save costs if services don't need outbound internet)"
   type        = bool
-  default     = false  # Changed to false to save $32/month
+  default     = false # Changed to false to save $32/month
 }

@@ -162,8 +162,42 @@ Successfully ran database schema migration using Docker-based ECS task:
 - **Kafka**: `kafka.alerting-platform-prod.local:9092` (internal via service discovery)
 - **Cost**: ~$15-20/month (no NAT Gateway, no ALB)
 
-## Future Tasks
-1) 🔄 UI Integration for alert-producer (HTTP API wrapper + UI component)
+## UI Deployment Infrastructure (2026-01-23)
+
+Deployed free-tier infrastructure for rule-service-ui:
+
+### Architecture (Direct EC2 Access + GitHub Pages)
+- **GitHub Pages**: Static site hosting (free)
+- **Direct EC2 Access**: Services exposed on public Elastic IP (no Lambda/API Gateway needed)
+- **Elastic IP**: `34.201.202.8` (stable, never changes)
+
+### API Endpoints
+- **rule-service**: `http://34.201.202.8:8081`
+- **alert-producer**: `http://34.201.202.8:8082`
+
+### Changes Made
+- Switched rule-service and alert-producer to **host network mode** (fixed ports)
+- Opened security group for ports 8081 and 8082 from anywhere
+- Added Elastic IP with auto-association on EC2 instance startup
+- UI uses `VITE_RULE_SERVICE_URL` and `VITE_ALERT_PRODUCER_URL` environment variables
+
+### Key Files
+- `.github/workflows/deploy-ui.yml` - GitHub Actions workflow (input: EC2 IP)
+- `rule-service-ui/src/services/api.js` - Configurable API endpoints
+- `terraform/modules/ecs-cluster/main.tf` - Elastic IP and security group
+
+### Deployment Complete
+- UI: `https://afikmenashe21.github.io/alerting-platform/`
+- Backend APIs: Direct access via Elastic IP
+
+### Cost Estimate
+- GitHub Pages: Free
+- Elastic IP: Free (when attached to running instance)
+- **Total: $0/month additional**
+
+## Next Steps
+1) ✅ UI deployed to GitHub Pages
+2) ✅ Backend accessible via Elastic IP
 
 ## Code health
 - Completed comprehensive cleanup and modularization across all services:

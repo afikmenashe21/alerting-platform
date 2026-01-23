@@ -1,4 +1,9 @@
-const API_BASE_URL = '/api/v1';
+// API base URLs - configurable for production deployment
+// In production: set VITE_RULE_SERVICE_URL=http://EC2_IP:8081
+// In development: uses Vite proxy (see vite.config.js)
+const API_BASE_URL = import.meta.env.VITE_RULE_SERVICE_URL 
+  ? `${import.meta.env.VITE_RULE_SERVICE_URL}/api/v1`
+  : '/api/v1';
 
 async function handleResponse(response) {
   console.log('Response received:', {
@@ -227,9 +232,12 @@ export const notificationsAPI = {
 // Alert Generator API (alert-producer)
 // ============================================================================
 
-// Use proxy in development (via Vite), direct URL in production
-// The proxy is configured in vite.config.js to route /alert-producer-api/* to http://localhost:8082/*
-const ALERT_PRODUCER_API_BASE = '/alert-producer-api/api/v1/alerts';
+// Alert producer URL - separate service on different port
+// In production: set VITE_ALERT_PRODUCER_URL=http://EC2_IP:8082
+// In development: uses Vite proxy (see vite.config.js)
+const ALERT_PRODUCER_API_BASE = import.meta.env.VITE_ALERT_PRODUCER_URL 
+  ? `${import.meta.env.VITE_ALERT_PRODUCER_URL}/api/v1/alerts`
+  : '/alert-producer-api/api/v1/alerts';
 
 export const alertGeneratorAPI = {
   async generate(config) {

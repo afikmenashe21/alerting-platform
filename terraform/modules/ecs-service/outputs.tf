@@ -27,3 +27,8 @@ output "log_group_name" {
   description = "CloudWatch log group name"
   value       = aws_cloudwatch_log_group.service.name
 }
+
+output "service_discovery_arn" {
+  description = "Service discovery service ARN"
+  value       = var.enable_service_discovery ? aws_service_discovery_service.service[0].arn : null
+}

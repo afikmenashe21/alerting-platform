@@ -96,3 +96,21 @@ variable "log_retention_days" {
   type        = number
   default     = 7
 }
+
+variable "use_host_network" {
+  description = "Use host network mode instead of bridge (for service discovery)"
+  type        = bool
+  default     = false
+}
+
+variable "service_discovery_namespace_id" {
+  description = "Service discovery namespace ID (required if use_host_network is true)"
+  type        = string
+  default     = ""
+}
+
+variable "enable_service_discovery" {
+  description = "Register service with Cloud Map"
+  type        = bool
+  default     = false
+}

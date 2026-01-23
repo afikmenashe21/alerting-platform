@@ -57,14 +57,14 @@ module "ecr" {
 module "ecs_cluster" {
   source = "./modules/ecs-cluster"
 
-  project_name           = var.project_name
-  environment            = var.environment
-  vpc_id                 = module.vpc.vpc_id
-  private_subnet_ids     = module.vpc.public_subnet_ids  # Using public subnets to avoid NAT Gateway costs
-  ecs_instance_type      = var.ecs_instance_type
-  desired_capacity       = var.ecs_desired_capacity
-  min_size               = var.ecs_min_size
-  max_size               = var.ecs_max_size
+  project_name              = var.project_name
+  environment               = var.environment
+  vpc_id                    = module.vpc.vpc_id
+  private_subnet_ids        = module.vpc.public_subnet_ids # Using public subnets to avoid NAT Gateway costs
+  ecs_instance_type         = var.ecs_instance_type
+  desired_capacity          = var.ecs_desired_capacity
+  min_size                  = var.ecs_min_size
+  max_size                  = var.ecs_max_size
   enable_container_insights = var.enable_container_insights
 }
 
@@ -72,15 +72,15 @@ module "ecs_cluster" {
 module "rds" {
   source = "./modules/rds"
 
-  project_name        = var.project_name
-  environment         = var.environment
-  vpc_id              = module.vpc.vpc_id
-  private_subnet_ids  = module.vpc.private_subnet_ids
-  db_name             = var.db_name
-  db_username         = var.db_username
-  db_password         = var.db_password
-  db_instance_class   = var.db_instance_class
-  allocated_storage   = var.db_allocated_storage
+  project_name          = var.project_name
+  environment           = var.environment
+  vpc_id                = module.vpc.vpc_id
+  private_subnet_ids    = module.vpc.private_subnet_ids
+  db_name               = var.db_name
+  db_username           = var.db_username
+  db_password           = var.db_password
+  db_instance_class     = var.db_instance_class
+  allocated_storage     = var.db_allocated_storage
   ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
 }
 
@@ -99,16 +99,16 @@ module "redis" {
 module "kafka" {
   source = "./modules/kafka"
 
-  project_name           = var.project_name
-  environment            = var.environment
-  ecs_cluster_id         = module.ecs_cluster.cluster_id
-  ecs_cluster_name       = module.ecs_cluster.cluster_name
-  vpc_id                 = module.vpc.vpc_id
-  private_subnet_ids     = module.vpc.private_subnet_ids
-  ecs_security_group_id  = module.ecs_cluster.ecs_security_group_id
-  log_retention_days     = var.log_retention_days
-  kafka_image            = "confluentinc/cp-kafka:7.5.0"
-  zookeeper_image        = "confluentinc/cp-zookeeper:7.5.0"
+  project_name          = var.project_name
+  environment           = var.environment
+  ecs_cluster_id        = module.ecs_cluster.cluster_id
+  ecs_cluster_name      = module.ecs_cluster.cluster_name
+  vpc_id                = module.vpc.vpc_id
+  private_subnet_ids    = module.vpc.private_subnet_ids
+  ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
+  log_retention_days    = var.log_retention_days
+  kafka_image           = "confluentinc/cp-kafka:7.5.0"
+  zookeeper_image       = "confluentinc/cp-zookeeper:7.5.0"
 }
 
 # Application Load Balancer for rule-service API
@@ -135,24 +135,27 @@ module "rule_service" {
   vpc_id                = module.vpc.vpc_id
   private_subnet_ids    = module.vpc.private_subnet_ids
   ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
-  
-  container_image       = "${module.ecr.repository_urls["rule-service"]}:${var.image_tag}"
-  container_port        = 8081  # rule-service listens on 8081
-  container_cpu         = var.container_cpu
-  container_memory      = var.container_memory
-  
-  desired_count         = var.service_desired_count
-  max_count             = var.service_max_count
-  
+
+  container_image  = "${module.ecr.repository_urls["rule-service"]}:${var.image_tag}"
+  container_port   = 8081 # rule-service listens on 8081
+  container_cpu    = var.container_cpu
+  container_memory = var.container_memory
+
+  desired_count = var.service_desired_count
+  max_count     = var.service_max_count
+
+  # Host network mode for direct public access (no Lambda/API Gateway needed)
+  use_host_network         = true
+  enable_service_discovery = false
+
   environment_variables = {
-    HTTP_PORT             = "8081"  # Explicitly set to match service code default
-    KAFKA_BROKERS         = module.kafka.kafka_endpoint
-    POSTGRES_DSN          = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
-    RULE_CHANGED_TOPIC    = "rule.changed"
+    HTTP_PORT          = "8081" # Explicitly set to match service code default
+    KAFKA_BROKERS      = module.kafka.kafka_endpoint
+    POSTGRES_DSN       = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
+    RULE_CHANGED_TOPIC = "rule.changed"
   }
-  
-  load_balancer_enabled = false  # Disabled - no ALB yet
-  # target_group_arn      = module.alb.rule_service_target_group_arn
+
+  load_balancer_enabled = false
   log_retention_days    = var.log_retention_days
 }
 
@@ -167,23 +170,23 @@ module "rule_updater" {
   vpc_id                = module.vpc.vpc_id
   private_subnet_ids    = module.vpc.private_subnet_ids
   ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
-  
-  container_image       = "${module.ecr.repository_urls["rule-updater"]}:${var.image_tag}"
-  container_port        = 0 # No external port
-  container_cpu         = var.container_cpu
-  container_memory      = var.container_memory
-  
-  desired_count         = 1 # MUST BE 1 - writes Redis snapshot
-  max_count             = 1 # NEVER scale this service
-  
+
+  container_image  = "${module.ecr.repository_urls["rule-updater"]}:${var.image_tag}"
+  container_port   = 0 # No external port
+  container_cpu    = var.container_cpu
+  container_memory = var.container_memory
+
+  desired_count = 1 # MUST BE 1 - writes Redis snapshot
+  max_count     = 1 # NEVER scale this service
+
   environment_variables = {
-    KAFKA_BROKERS         = module.kafka.kafka_endpoint
-    POSTGRES_DSN          = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
-    REDIS_ADDR            = module.redis.endpoint
-    RULE_CHANGED_TOPIC    = "rule.changed"
-    CONSUMER_GROUP_ID     = "rule-updater-group"
+    KAFKA_BROKERS      = module.kafka.kafka_endpoint
+    POSTGRES_DSN       = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
+    REDIS_ADDR         = module.redis.endpoint
+    RULE_CHANGED_TOPIC = "rule.changed"
+    CONSUMER_GROUP_ID  = "rule-updater-group"
   }
-  
+
   load_balancer_enabled = false
   log_retention_days    = var.log_retention_days
 }
@@ -199,25 +202,25 @@ module "evaluator" {
   vpc_id                = module.vpc.vpc_id
   private_subnet_ids    = module.vpc.private_subnet_ids
   ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
-  
-  container_image       = "${module.ecr.repository_urls["evaluator"]}:${var.image_tag}"
-  container_port        = 0 # No external port
-  container_cpu         = var.container_cpu
-  container_memory      = var.container_memory
-  
-  desired_count         = var.service_desired_count
-  max_count             = var.service_max_count
-  
+
+  container_image  = "${module.ecr.repository_urls["evaluator"]}:${var.image_tag}"
+  container_port   = 0 # No external port
+  container_cpu    = var.container_cpu
+  container_memory = var.container_memory
+
+  desired_count = var.service_desired_count
+  max_count     = var.service_max_count
+
   environment_variables = {
-    KAFKA_BROKERS           = module.kafka.kafka_endpoint
-    REDIS_ADDR              = module.redis.endpoint
-    ALERTS_NEW_TOPIC        = "alerts.new"
-    ALERTS_MATCHED_TOPIC    = "alerts.matched"
-    RULE_CHANGED_TOPIC      = "rule.changed"
-    CONSUMER_GROUP_ID       = "evaluator-group"
-    RULE_CHANGED_GROUP_ID   = "evaluator-rule-changed-group"
+    KAFKA_BROKERS         = module.kafka.kafka_endpoint
+    REDIS_ADDR            = module.redis.endpoint
+    ALERTS_NEW_TOPIC      = "alerts.new"
+    ALERTS_MATCHED_TOPIC  = "alerts.matched"
+    RULE_CHANGED_TOPIC    = "rule.changed"
+    CONSUMER_GROUP_ID     = "evaluator-group"
+    RULE_CHANGED_GROUP_ID = "evaluator-rule-changed-group"
   }
-  
+
   load_balancer_enabled = false
   log_retention_days    = var.log_retention_days
 }
@@ -233,23 +236,23 @@ module "aggregator" {
   vpc_id                = module.vpc.vpc_id
   private_subnet_ids    = module.vpc.private_subnet_ids
   ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
-  
-  container_image       = "${module.ecr.repository_urls["aggregator"]}:${var.image_tag}"
-  container_port        = 0 # No external port
-  container_cpu         = var.container_cpu
-  container_memory      = var.container_memory
-  
-  desired_count         = var.service_desired_count
-  max_count             = var.service_max_count
-  
+
+  container_image  = "${module.ecr.repository_urls["aggregator"]}:${var.image_tag}"
+  container_port   = 0 # No external port
+  container_cpu    = var.container_cpu
+  container_memory = var.container_memory
+
+  desired_count = var.service_desired_count
+  max_count     = var.service_max_count
+
   environment_variables = {
-    KAFKA_BROKERS           = module.kafka.kafka_endpoint
-    POSTGRES_DSN            = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
-    ALERTS_MATCHED_TOPIC    = "alerts.matched"
+    KAFKA_BROKERS             = module.kafka.kafka_endpoint
+    POSTGRES_DSN              = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
+    ALERTS_MATCHED_TOPIC      = "alerts.matched"
     NOTIFICATIONS_READY_TOPIC = "notifications.ready"
-    CONSUMER_GROUP_ID       = "aggregator-group"
+    CONSUMER_GROUP_ID         = "aggregator-group"
   }
-  
+
   load_balancer_enabled = false
   log_retention_days    = var.log_retention_days
 }
@@ -265,15 +268,15 @@ module "sender" {
   vpc_id                = module.vpc.vpc_id
   private_subnet_ids    = module.vpc.private_subnet_ids
   ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
-  
-  container_image       = "${module.ecr.repository_urls["sender"]}:${var.image_tag}"
-  container_port        = 0 # No external port
-  container_cpu         = var.container_cpu
-  container_memory      = var.container_memory
-  
-  desired_count         = var.service_desired_count
-  max_count             = var.service_max_count
-  
+
+  container_image  = "${module.ecr.repository_urls["sender"]}:${var.image_tag}"
+  container_port   = 0 # No external port
+  container_cpu    = var.container_cpu
+  container_memory = var.container_memory
+
+  desired_count = var.service_desired_count
+  max_count     = var.service_max_count
+
   environment_variables = {
     KAFKA_BROKERS             = module.kafka.kafka_endpoint
     POSTGRES_DSN              = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
@@ -301,21 +304,56 @@ module "alert_producer" {
   vpc_id                = module.vpc.vpc_id
   private_subnet_ids    = module.vpc.private_subnet_ids
   ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
-  
-  container_image       = "${module.ecr.repository_urls["alert-producer"]}:${var.image_tag}"
-  container_port        = 8082  # alert-producer-api listens on 8082
-  container_cpu         = var.container_cpu
-  container_memory      = var.container_memory
-  
-  desired_count         = var.service_desired_count
-  max_count             = var.service_max_count
-  
+
+  container_image  = "${module.ecr.repository_urls["alert-producer"]}:${var.image_tag}"
+  container_port   = 8082 # alert-producer-api listens on 8082
+  container_cpu    = var.container_cpu
+  container_memory = var.container_memory
+
+  desired_count = var.service_desired_count
+  max_count     = var.service_max_count
+
+  # Host network mode for direct public access (no Lambda/API Gateway needed)
+  use_host_network         = true
+  enable_service_discovery = false
+
   environment_variables = {
-    KAFKA_BROKERS         = module.kafka.kafka_endpoint
-    ALERTS_NEW_TOPIC      = "alerts.new"
+    KAFKA_BROKERS    = module.kafka.kafka_endpoint
+    ALERTS_NEW_TOPIC = "alerts.new"
   }
-  
-  load_balancer_enabled = false  # Disabled - no ALB yet
-  # target_group_arn      = module.alb.alert_producer_target_group_arn
+
+  load_balancer_enabled = false
   log_retention_days    = var.log_retention_days
 }
+
+# =============================================================================
+# API Gateway DISABLED - Using direct EC2 access instead (faster, simpler)
+# =============================================================================
+# Services are exposed directly on EC2 public IP:
+# - rule-service: port 8081
+# - alert-producer: port 8082
+#
+# module "api_gateway" {
+#   source = "./modules/api-gateway"
+#
+#   project_name          = var.project_name
+#   environment           = var.environment
+#   vpc_id                = module.vpc.vpc_id
+#   private_subnet_ids    = module.vpc.private_subnet_ids
+#   ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
+#   ecs_cluster_name      = module.ecs_cluster.cluster_name
+#   aws_region            = var.aws_region
+#   log_retention_days    = var.log_retention_days
+#   cors_allowed_origins  = ["*"]
+# }
+
+# =============================================================================
+# Static Site (DISABLED - CloudFront requires AWS account verification)
+# =============================================================================
+# UI will be deployed to GitHub Pages instead
+# module "static_site" {
+#   source = "./modules/static-site"
+#   project_name = var.project_name
+#   environment  = var.environment
+#   site_name    = "ui"
+# }

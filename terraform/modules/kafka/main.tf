@@ -59,7 +59,7 @@ resource "aws_iam_role_policy_attachment" "kafka_task_execution" {
 # Memory optimized for low-cost deployment on t3.small
 resource "aws_ecs_task_definition" "zookeeper" {
   family                   = "${var.project_name}-${var.environment}-zookeeper"
-  network_mode             = "host"  # Host mode for direct network access
+  network_mode             = "host" # Host mode for direct network access
   requires_compatibilities = ["EC2"]
   cpu                      = "128"
   memory                   = "192"
@@ -116,7 +116,7 @@ resource "aws_ecs_task_definition" "zookeeper" {
 # Memory optimized for low-cost deployment on t3.small
 resource "aws_ecs_task_definition" "kafka" {
   family                   = "${var.project_name}-${var.environment}-kafka"
-  network_mode             = "host"  # Host mode for direct network access
+  network_mode             = "host" # Host mode for direct network access
   requires_compatibilities = ["EC2"]
   cpu                      = "256"
   memory                   = "384"
@@ -215,59 +215,13 @@ resource "aws_service_discovery_private_dns_namespace" "main" {
   }
 }
 
-# Service Discovery for Kafka - using A record for simple DNS resolution
-resource "aws_service_discovery_service" "kafka" {
-  name = "kafka"
+# Note: Service Discovery for Kafka is defined in combined-task.tf
 
-  dns_config {
-    namespace_id = aws_service_discovery_private_dns_namespace.main.id
-
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-
-    routing_policy = "MULTIVALUE"
-  }
-
-  health_check_custom_config {
-    failure_threshold = 1
-  }
-}
-
-# Zookeeper ECS Service
-# Using host network mode - no service discovery (Kafka connects via localhost)
-resource "aws_ecs_service" "zookeeper" {
-  name            = "zookeeper"
-  cluster         = var.ecs_cluster_id
-  task_definition = aws_ecs_task_definition.zookeeper.arn
-  desired_count   = 1
-  launch_type     = "EC2"
-
-  # No service discovery - Kafka connects to Zookeeper via localhost
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-zookeeper"
-  }
-}
-
-# Kafka ECS Service
-# Using host network mode - no service discovery (services connect via private IP)
-resource "aws_ecs_service" "kafka" {
-  name            = "kafka"
-  cluster         = var.ecs_cluster_id
-  task_definition = aws_ecs_task_definition.kafka.arn
-  desired_count   = 1
-  launch_type     = "EC2"
-
-  # No service discovery - services will connect to Kafka via the instance private IP
-  # The Kafka advertised listeners will use the instance metadata to get the IP
-
-  depends_on = [aws_ecs_service.zookeeper]
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-kafka"
-  }
-}
+# =============================================================================
+# DEPRECATED: Standalone Kafka/Zookeeper services REMOVED
+# Using kafka-combined instead (see combined-task.tf)
+# =============================================================================
+# The standalone kafka and zookeeper ECS services have been removed.
+# Only kafka-combined is used now.
 
 data "aws_region" "current" {}

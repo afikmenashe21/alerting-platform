@@ -102,9 +102,8 @@ resource "aws_ecs_service" "kafka_combined" {
   }
 
   service_registries {
-    registry_arn   = aws_service_discovery_service.kafka.arn
-    container_name = "kafka"
-    container_port = 9092
+    registry_arn = aws_service_discovery_service.kafka.arn
+    # For awsvpc mode with A record, don't specify container_name/container_port
   }
 
   deployment_minimum_healthy_percent = 0
@@ -120,7 +119,7 @@ resource "aws_service_discovery_service" "kafka" {
   name = "kafka"
 
   dns_config {
-    namespace_id = var.service_discovery_namespace_id
+    namespace_id = aws_service_discovery_private_dns_namespace.main.id
 
     dns_records {
       type = "A"

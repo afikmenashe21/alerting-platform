@@ -39,19 +39,18 @@ output "kafka_endpoint" {
   value       = module.kafka.kafka_endpoint
 }
 
-output "alb_dns_name" {
-  description = "Application Load Balancer DNS name (disabled - contact AWS Support to enable)"
-  value       = "ALB not enabled - contact AWS Support"
+# Stable Elastic IP for API access
+output "api_elastic_ip" {
+  description = "Elastic IP for API access (stable, never changes)"
+  value       = module.ecs_cluster.elastic_ip
 }
 
-output "rule_service_url" {
-  description = "Rule Service API URL (internal only - no ALB)"
-  value       = "Internal access only - ALB not enabled"
-}
-
-output "alert_producer_url" {
-  description = "Alert Producer API URL (internal only - no ALB)"
-  value       = "Internal access only - ALB not enabled"
+output "api_endpoints" {
+  description = "API endpoints for direct access"
+  value = {
+    rule_service    = "http://${module.ecs_cluster.elastic_ip}:8081"
+    alert_producer  = "http://${module.ecs_cluster.elastic_ip}:8082"
+  }
 }
 
 output "ecr_repository_urls" {
@@ -61,7 +60,7 @@ output "ecr_repository_urls" {
 
 output "deployment_commands" {
   description = "Commands to deploy services"
-  value = <<-EOT
+  value       = <<-EOT
     # 1. Authenticate Docker to ECR
     aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin ${split("/", module.ecr.repository_urls["rule-service"])[0]}
     
@@ -75,3 +74,5 @@ output "deployment_commands" {
     # See deployment guide for complete instructions
   EOT
 }
+
+# UI deployment commands disabled until CloudFront is available

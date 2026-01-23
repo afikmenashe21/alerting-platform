@@ -41,6 +41,26 @@ resource "aws_iam_role_policy_attachment" "ecs_instance_ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+# Allow ECS instances to associate Elastic IP on startup
+resource "aws_iam_role_policy" "ecs_eip_association" {
+  name = "${var.project_name}-${var.environment}-ecs-eip-policy"
+  role = aws_iam_role.ecs_instance.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:AssociateAddress",
+          "ec2:DescribeAddresses"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 resource "aws_iam_instance_profile" "ecs" {
   name = "${var.project_name}-${var.environment}-ecs-instance-profile"
   role = aws_iam_role.ecs_instance.name
@@ -60,22 +80,31 @@ resource "aws_security_group" "ecs_instances" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Allow traffic from ALB (disabled - no ALB)
-  # ingress {
-  #   from_port       = 32768
-  #   to_port         = 65535
-  #   protocol        = "tcp"
-  #   security_groups = [aws_security_group.alb.id]
-  #   description     = "Allow traffic from ALB"
-  # }
-
   # Allow internal communication between services
   ingress {
-    from_port = 0
-    to_port   = 0
-    protocol  = "-1"
-    self      = true
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    self        = true
     description = "Allow all traffic within security group"
+  }
+
+  # Allow public access to rule-service API (port 8081)
+  ingress {
+    from_port   = 8081
+    to_port     = 8081
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow public access to rule-service API"
+  }
+
+  # Allow public access to alert-producer API (port 8082)
+  ingress {
+    from_port   = 8082
+    to_port     = 8082
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow public access to alert-producer API"
   }
 
   tags = {
@@ -150,12 +179,21 @@ resource "aws_launch_template" "ecs" {
     name = aws_iam_instance_profile.ecs.name
   }
 
-  vpc_security_group_ids = [aws_security_group.ecs_instances.id]
+  # Network interface with public IP for direct access (no NAT/ALB needed)
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [aws_security_group.ecs_instances.id]
+    delete_on_termination       = true
+  }
 
   user_data = base64encode(<<-EOF
     #!/bin/bash
     echo ECS_CLUSTER=${aws_ecs_cluster.main.name} >> /etc/ecs/ecs.config
     echo ECS_ENABLE_CONTAINER_METADATA=true >> /etc/ecs/ecs.config
+    
+    # Associate Elastic IP for stable public access
+    INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+    aws ec2 associate-address --instance-id $INSTANCE_ID --allocation-id ${aws_eip.ecs.id} --region ${data.aws_region.current.name}
   EOF
   )
 
@@ -197,6 +235,15 @@ resource "aws_autoscaling_group" "ecs" {
     key                 = "AmazonECSManaged"
     value               = true
     propagate_at_launch = true
+  }
+}
+
+# Elastic IP for stable public access
+resource "aws_eip" "ecs" {
+  domain = "vpc"
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-ecs-eip"
   }
 }
 

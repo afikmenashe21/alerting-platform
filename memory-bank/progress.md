@@ -210,6 +210,15 @@
   - Preset configurations and manual configuration options
   - See `services/alert-producer/memory-bank/` for detailed design
 
+- **UI Production Deployment (2026-01-23)**: Free-tier deployment for rule-service-ui
+  - GitHub Pages for static site hosting (free)
+  - Direct EC2 access via Elastic IP (no Lambda/API Gateway needed)
+  - Host network mode for rule-service (port 8081) and alert-producer (port 8082)
+  - Elastic IP `34.201.202.8` for stable, permanent access
+  - Security group opened for ports 8081, 8082
+  - GitHub Actions workflow: `.github/workflows/deploy-ui.yml`
+  - Total cost: $0/month additional
+
 - **Protobuf Integration (Complete)**: All Kafka topics migrated from JSON to protobuf
   - Created protobuf definition files (`proto/` directory):
     - `common.proto`: Shared enums (Severity, RuleAction)

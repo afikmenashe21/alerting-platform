@@ -20,10 +20,15 @@ output "ecs_security_group_id" {
 
 output "alb_security_group_id" {
   description = "Security group ID for ALB (disabled)"
-  value       = null  # No ALB security group
+  value       = null # No ALB security group
 }
 
 output "ecs_instance_role_arn" {
   description = "IAM role ARN for ECS instances"
   value       = aws_iam_role.ecs_instance.arn
+}
+
+output "elastic_ip" {
+  description = "Elastic IP for public API access (stable, doesn't change)"
+  value       = aws_eip.ecs.public_ip
 }
