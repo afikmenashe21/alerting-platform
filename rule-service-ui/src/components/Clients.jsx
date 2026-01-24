@@ -26,18 +26,10 @@ export default function Clients() {
 
   const testConnection = async () => {
     try {
-      // Try API endpoint through proxy
-      const response = await fetch('/api/v1/clients?limit=1');
-      console.log('Connection test - Status:', response.status);
-      
-      // Any response (even 200 with empty array) means service is reachable
-      if (response.status === 0) {
-        // Network error - service not running
-        setConnectionStatus('error');
-      } else {
-        // Got a response (even if it's an error) - service is running
-        setConnectionStatus('connected');
-      }
+      // Try API endpoint using the configured API
+      const data = await clientsAPI.list(1, 0);
+      console.log('Connection test - Success:', data);
+      setConnectionStatus('connected');
     } catch (err) {
       console.error('Connection test failed:', err);
       setConnectionStatus('error');
