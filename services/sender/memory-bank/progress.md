@@ -178,8 +178,50 @@ type Provider interface {
 - [x] Simple DLQ pattern: mark notification as FAILED after all retries exhausted
 - [x] Skip FAILED notifications on reprocessing (idempotency)
 
+## Performance Scaling (2026-01-24)
+
+### Test Email Filtering
+- [x] Skip sending to test/dummy email domains to prevent quota waste
+- [x] Filtered domains: `@example.com`, `@example.org`, `@example.net`, `@test.com`, `@localhost`, `@invalid`
+- [x] Test emails are logged and marked as SENT (not actually sent)
+- [x] Prevents rate limit exhaustion during load testing
+
+### Centralized Rate Limiting
+- [x] Token bucket rate limiter implemented at provider registry level
+- [x] Configurable via `EMAIL_RATE_LIMIT` environment variable (default: 2 RPS)
+- [x] Rate limiting applied before any external API call
+- [x] Prevents email provider rate limit errors (e.g., Resend 2 RPS limit)
+- [x] Rate limiting is per-process (multiple sender tasks = N * rate_limit)
+
+#### Implementation
+```go
+// provider/provider.go
+type Registry struct {
+    providers   []Provider
+    rateLimiter chan struct{}  // Token bucket
+}
+
+func (r *Registry) Send(ctx context.Context, req *EmailRequest) error {
+    // Wait for rate limiter token
+    select {
+    case <-ctx.Done():
+        return ctx.Err()
+    case <-r.rateLimiter:
+        // Got token, proceed with send
+    }
+    // ... send email
+}
+```
+
+### Load Test Results (100k alerts)
+- Sender throughput: ~120 RPS
+- Error rate: 0%
+- Test emails filtered: ~95% (test data uses @example.com)
+- Real emails sent: Rate limited to 2/sec per provider
+
 ## Future Enhancements
-- Rate limiting per client/endpoint
+- ~~Rate limiting per client/endpoint~~ ✅ Implemented at provider level
 - Metrics and observability (success/failure rates per endpoint type)
 - Support for Slack Block Kit for richer message formatting
 - Additional email providers (Mailgun, SendGrid, Postmark)
+- Distributed rate limiting (Redis-based for multi-instance coordination)

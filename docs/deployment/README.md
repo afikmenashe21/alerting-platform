@@ -9,6 +9,7 @@ See [`CURRENT_STATUS.md`](CURRENT_STATUS.md) for deployment status and next step
 
 - **[Quick Start Guide](QUICKSTART.md)** - Deploy in under 30 minutes
 - **[Complete Production Guide](PRODUCTION_DEPLOYMENT.md)** - Comprehensive deployment documentation
+- **[Performance Scaling Guide](PERFORMANCE_SCALING.md)** - Load test results and scaling strategies
 - **[Terraform README](../../terraform/README.md)** - Infrastructure as Code details
 
 ## Overview
@@ -375,11 +376,11 @@ Before production:
 After deployment:
 1. ✅ Verify health endpoints
 2. ✅ Create test data
-3. ⚠️ Set up monitoring and alerts
-4. ⚠️ Configure custom domain
-5. ⚠️ Enable HTTPS
-6. ⚠️ Deploy UI (rule-service-ui)
-7. ⚠️ Load test
+3. ✅ Deploy UI (rule-service-ui) - GitHub Pages
+4. ✅ Load test - See [PERFORMANCE_SCALING.md](PERFORMANCE_SCALING.md)
+5. ⚠️ Set up monitoring and alerts
+6. ⚠️ Configure custom domain
+7. ⚠️ Enable HTTPS
 8. ⚠️ Document runbooks
 
 ---
