@@ -390,6 +390,7 @@ module "alert_producer" {
 
   environment_variables = {
     KAFKA_BROKERS    = module.kafka.kafka_endpoint
+    REDIS_ADDR       = module.redis.endpoint
     ALERTS_NEW_TOPIC = "alerts.new"
   }
 
