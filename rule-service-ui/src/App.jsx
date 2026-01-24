@@ -4,16 +4,30 @@ import Rules from './components/Rules';
 import Endpoints from './components/Endpoints';
 import Notifications from './components/Notifications';
 import AlertGenerator from './components/AlertGenerator';
+import Metrics from './components/Metrics';
+import Services from './components/Services';
 import './index.css';
 
 function App() {
-  const [activeTab, setActiveTab] = useState('clients');
+  const [activeTab, setActiveTab] = useState('metrics');
 
   return (
     <div className="container">
       <div className="header">
-        <h1>Rule Service Management</h1>
+        <h1>Alerting Platform</h1>
         <div className="nav">
+          <button
+            className={activeTab === 'metrics' ? 'active' : ''}
+            onClick={() => setActiveTab('metrics')}
+          >
+            Dashboard
+          </button>
+          <button
+            className={activeTab === 'services' ? 'active' : ''}
+            onClick={() => setActiveTab('services')}
+          >
+            Services
+          </button>
           <button
             className={activeTab === 'clients' ? 'active' : ''}
             onClick={() => setActiveTab('clients')}
@@ -47,6 +61,8 @@ function App() {
         </div>
       </div>
 
+      {activeTab === 'metrics' && <Metrics />}
+      {activeTab === 'services' && <Services />}
       {activeTab === 'clients' && <Clients />}
       {activeTab === 'rules' && <Rules />}
       {activeTab === 'endpoints' && <Endpoints />}

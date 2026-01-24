@@ -60,7 +60,7 @@ func TestHandlers_CreateClient(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	tests := []struct {
 		name           string
@@ -155,7 +155,7 @@ func TestHandlers_GetClient(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	tests := []struct {
 		name           string
@@ -232,7 +232,7 @@ func TestHandlers_ListClients(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("successful list", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"client_id", "name", "created_at", "updated_at"}).
@@ -276,7 +276,7 @@ func TestHandlers_CreateRule(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	tests := []struct {
 		name           string
@@ -381,7 +381,7 @@ func TestHandlers_GetRule(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("successful get", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"rule_id", "client_id", "severity", "source", "name", "enabled", "version", "created_at", "updated_at"}).
@@ -414,7 +414,7 @@ func TestHandlers_ListRules(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("list all", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"rule_id", "client_id", "severity", "source", "name", "enabled", "version", "created_at", "updated_at"}).
@@ -466,7 +466,7 @@ func TestHandlers_UpdateRule(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	tests := []struct {
 		name           string
@@ -551,7 +551,7 @@ func TestHandlers_ToggleRuleEnabled(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("successful toggle", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"rule_id", "client_id", "severity", "source", "name", "enabled", "version", "created_at", "updated_at"}).
@@ -584,7 +584,7 @@ func TestHandlers_DeleteRule(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("successful delete", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"rule_id", "client_id", "severity", "source", "name", "enabled", "version", "created_at", "updated_at"}).
@@ -620,7 +620,7 @@ func TestHandlers_CreateEndpoint(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	tests := []struct {
 		name           string
@@ -690,7 +690,7 @@ func TestHandlers_GetEndpoint(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("successful get", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"endpoint_id", "rule_id", "type", "value", "enabled", "created_at", "updated_at"}).
@@ -723,7 +723,7 @@ func TestHandlers_ListEndpoints(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("successful list", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"endpoint_id", "rule_id", "type", "value", "enabled", "created_at", "updated_at"}).
@@ -756,7 +756,7 @@ func TestHandlers_UpdateEndpoint(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("successful update", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"endpoint_id", "rule_id", "type", "value", "enabled", "created_at", "updated_at"}).
@@ -789,7 +789,7 @@ func TestHandlers_ToggleEndpointEnabled(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("successful toggle", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"endpoint_id", "rule_id", "type", "value", "enabled", "created_at", "updated_at"}).
@@ -822,7 +822,7 @@ func TestHandlers_DeleteEndpoint(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("successful delete", func(t *testing.T) {
 		mock.ExpectExec("DELETE FROM endpoints").
@@ -853,7 +853,7 @@ func TestHandlers_GetNotification(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("successful get", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"notification_id", "client_id", "alert_id", "severity", "source", "name", "context", "rule_ids", "status", "created_at", "updated_at"}).
@@ -886,7 +886,7 @@ func TestHandlers_ListNotifications(t *testing.T) {
 		// Create a minimal producer that will fail on publish but won't crash
 		prod, _ = producer.NewProducer("dummy:9092", "dummy")
 	}
-	h := NewHandlers(db, prod)
+	h := NewHandlers(db, prod, nil, nil)
 
 	t.Run("list all", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"notification_id", "client_id", "alert_id", "severity", "source", "name", "context", "rule_ids", "status", "created_at", "updated_at"}).

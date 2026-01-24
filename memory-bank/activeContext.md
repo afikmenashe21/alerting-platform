@@ -207,6 +207,46 @@ Deployed free-tier infrastructure for rule-service-ui:
   - All services maintain existing functionality with improved organization
   - Remaining files slightly over 200 lines are well-organized handler files without obvious redundancy
 
+## Centralized Metrics System (2026-01-24)
+
+### Overview
+Centralized metrics collection and reporting via `pkg/metrics/` package. All 6 services now properly integrate with the shared metrics system.
+
+### Centralized Package (`pkg/metrics/metrics.go`)
+- **Collector**: Writes metrics to Redis every 30s with `metrics:` key prefix
+- **Reader**: Reads service metrics from Redis (used by rule-service UI)
+- **Helper Functions** (newly added to reduce duplication):
+  - `GetEnvOrDefault(key, default)` - environment variable lookup
+  - `MaskDSN(dsn)` - mask sensitive DSN info for logging
+  - `ConnectRedis(ctx, addr)` - standard Redis connection with ping validation
+
+### Metrics Tracked Per Service
+- **Standard Counters**: MessagesReceived, MessagesProcessed, MessagesPublished, ProcessingErrors
+- **Rates**: MessagesPerSecond (calculated per report interval)
+- **Latencies**: AvgProcessingLatencyMs
+- **Custom Counters**: Service-specific metrics (e.g., `alerts_matched`, `notifications_sent`)
+
+### Service Integration Status
+| Service | Metrics Collector | Custom Counters |
+|---------|-------------------|-----------------|
+| evaluator | ✅ Full integration | alerts_matched, alerts_unmatched, rules_count |
+| aggregator | ✅ Full integration | notifications_created, notifications_deduplicated |
+| sender | ✅ Full integration | notifications_sent, notifications_failed, notifications_skipped |
+| rule-updater | ✅ Full integration | rules_CREATED, rules_UPDATED, rules_DELETED, rules_DISABLED |
+| alert-producer | ✅ Full integration | (uses standard published/errors) |
+| rule-service | ✅ Reader + Collector | (serves as metrics API endpoint) |
+
+### Code Deduplication
+Removed duplicated helper functions from all 6 services:
+- `getEnvOrDefault()` → now use `metrics.GetEnvOrDefault()`
+- `maskDSN()` → now use `metrics.MaskDSN()`
+- Redis connection boilerplate → now use `metrics.ConnectRedis()`
+
+### API Endpoints
+- `GET /api/v1/metrics` - Database metrics (notifications, rules, clients, endpoints)
+- `GET /api/v1/services/metrics` - All service metrics from Redis
+- `GET /api/v1/services/metrics?service=<name>` - Single service metrics
+
 ## Decisions locked for MVP
 - Rules support exact match and wildcard "*" on (severity, source, name).
 - Dedupe in aggregator DB unique constraint.

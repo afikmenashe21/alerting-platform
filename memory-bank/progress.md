@@ -77,6 +77,24 @@
     - Documentation: `docs/deployment/KAFKA_FIX_SUMMARY.md`
     - **Result**: ✅ Fully automated, zero-configuration Kafka connectivity that survives instance changes
 
+## Centralized Metrics Integration (2026-01-24)
+- [x] Added centralized helper functions to `pkg/metrics/`:
+  - `GetEnvOrDefault()` - environment variable with default
+  - `MaskDSN()` - mask sensitive DSN for logging
+  - `ConnectRedis()` - standard Redis connection with validation
+- [x] Wired up metrics in all 6 services:
+  - aggregator: NewProcessorWithMetrics, tracks notifications_created/deduplicated
+  - sender: processNotifications with metrics, tracks notifications_sent/failed/skipped
+  - rule-updater: NewProcessorWithMetrics, tracks rules_CREATED/UPDATED/DELETED/DISABLED
+  - alert-producer: NewProcessorWithMetrics, tracks published/errors
+  - evaluator: Already had full integration (alerts_matched/unmatched)
+  - rule-service: Reader for UI + own metrics collector
+- [x] Removed duplicated code from all service main.go files:
+  - getEnvOrDefault() - replaced with metrics.GetEnvOrDefault()
+  - maskDSN() - replaced with metrics.MaskDSN()
+  - Redis connection boilerplate - replaced with metrics.ConnectRedis()
+- [x] All services build successfully with new centralized helpers
+
 ## Code health
 - [x] rule-service: comprehensive code cleanup and modularization:
   - Removed redundant code via private helpers (validation, HTTP, JSON parsing)

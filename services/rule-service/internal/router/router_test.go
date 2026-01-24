@@ -15,7 +15,7 @@ import (
 func TestNewRouter(t *testing.T) {
 	db := &database.DB{}
 	prod := &producer.Producer{}
-	h := handlers.NewHandlers(db, prod)
+	h := handlers.NewHandlers(db, prod, nil, nil)
 
 	router := NewRouter(h)
 	if router == nil {
@@ -33,7 +33,7 @@ func TestNewRouter(t *testing.T) {
 func TestRouter_Handler(t *testing.T) {
 	db := &database.DB{}
 	prod := &producer.Producer{}
-	h := handlers.NewHandlers(db, prod)
+	h := handlers.NewHandlers(db, prod, nil, nil)
 
 	router := NewRouter(h)
 	handler := router.Handler()
@@ -64,7 +64,7 @@ func TestRouter_Handler(t *testing.T) {
 func TestRouter_HealthCheck(t *testing.T) {
 	db := &database.DB{}
 	prod := &producer.Producer{}
-	h := handlers.NewHandlers(db, prod)
+	h := handlers.NewHandlers(db, prod, nil, nil)
 
 	router := NewRouter(h)
 	handler := router.Handler()
@@ -86,7 +86,7 @@ func TestRouter_HealthCheck(t *testing.T) {
 func TestNewServer(t *testing.T) {
 	db := &database.DB{}
 	prod := &producer.Producer{}
-	h := handlers.NewHandlers(db, prod)
+	h := handlers.NewHandlers(db, prod, nil, nil)
 
 	server := NewServer("8081", h)
 	if server == nil {
@@ -118,10 +118,10 @@ func TestRouter_Routes(t *testing.T) {
 	// If we can't create db/prod, use nil - test will still verify routes exist
 	var h *handlers.Handlers
 	if db != nil && prod != nil {
-		h = handlers.NewHandlers(db, prod)
+		h = handlers.NewHandlers(db, prod, nil, nil)
 	} else {
 		// Use nil - routes will panic but we catch it
-		h = handlers.NewHandlers(nil, nil)
+		h = handlers.NewHandlers(nil, nil, nil, nil)
 	}
 
 	router := NewRouter(h)
@@ -177,7 +177,7 @@ func TestRouter_Routes(t *testing.T) {
 func TestCorsMiddleware(t *testing.T) {
 	db := &database.DB{}
 	prod := &producer.Producer{}
-	h := handlers.NewHandlers(db, prod)
+	h := handlers.NewHandlers(db, prod, nil, nil)
 
 	router := NewRouter(h)
 	handler := router.Handler()

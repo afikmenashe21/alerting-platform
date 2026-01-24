@@ -29,13 +29,22 @@ func (p *Processor) runBurstModeWithSize(ctx context.Context, burstSize int, pro
 		default:
 		}
 
+		alertStart := time.Now()
 		alert := p.generator.Generate()
 		if err := p.publisher.Publish(ctx, alert); err != nil {
+			if p.metrics != nil {
+				p.metrics.RecordError()
+			}
 			if err := handlePublishError(ctx, alert, err, i+1); err == context.Canceled {
 				slog.Warn("Publish cancelled during burst", "sent", i, "requested", burstSize)
 				return context.Canceled
 			}
 			return fmt.Errorf("failed to publish alert %d: %w", i+1, err)
+		}
+
+		if p.metrics != nil {
+			p.metrics.RecordProcessed(time.Since(alertStart))
+			p.metrics.RecordPublished()
 		}
 
 		// Update progress callback if provided

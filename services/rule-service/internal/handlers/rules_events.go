@@ -24,6 +24,12 @@ func (h *Handlers) publishRuleChangedEvent(ctx context.Context, rule *database.R
 	if err := h.producer.Publish(ctx, changed); err != nil {
 		slog.Error("Failed to publish rule.changed event", "error", err, "rule_id", rule.RuleID)
 		// Continue - the rule operation succeeded, event publishing failure can be handled separately
+		return
+	}
+	// Track successful Kafka publish
+	if h.metricsCollector != nil {
+		h.metricsCollector.RecordPublished()
+		h.metricsCollector.IncrementCustom("kafka_rule_" + action)
 	}
 }
 
@@ -42,5 +48,11 @@ func (h *Handlers) publishRuleDeletedEvent(ctx context.Context, rule *database.R
 	if err := h.producer.Publish(ctx, changed); err != nil {
 		slog.Error("Failed to publish rule.changed event", "error", err, "rule_id", rule.RuleID)
 		// Continue - the rule was deleted, event publishing failure can be handled separately
+		return
+	}
+	// Track successful Kafka publish
+	if h.metricsCollector != nil {
+		h.metricsCollector.RecordPublished()
+		h.metricsCollector.IncrementCustom("kafka_rule_" + events.ActionDeleted)
 	}
 }

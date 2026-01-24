@@ -13,16 +13,19 @@ import (
 	"aggregator/internal/database"
 	"aggregator/internal/processor"
 	"aggregator/internal/producer"
+
+	"github.com/afikmenashe/alerting-platform/pkg/metrics"
 )
 
 func main() {
 	// Parse command-line flags with environment variable fallbacks
 	cfg := &config.Config{}
-	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", getEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
-	flag.StringVar(&cfg.AlertsMatchedTopic, "alerts-matched-topic", getEnvOrDefault("ALERTS_MATCHED_TOPIC", "alerts.matched"), "Kafka topic for matched alerts")
-	flag.StringVar(&cfg.NotificationsReadyTopic, "notifications-ready-topic", getEnvOrDefault("NOTIFICATIONS_READY_TOPIC", "notifications.ready"), "Kafka topic for ready notifications")
-	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", getEnvOrDefault("CONSUMER_GROUP_ID", "aggregator-group"), "Kafka consumer group ID")
-	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", getEnvOrDefault("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable"), "PostgreSQL connection string")
+	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", metrics.GetEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
+	flag.StringVar(&cfg.AlertsMatchedTopic, "alerts-matched-topic", metrics.GetEnvOrDefault("ALERTS_MATCHED_TOPIC", "alerts.matched"), "Kafka topic for matched alerts")
+	flag.StringVar(&cfg.NotificationsReadyTopic, "notifications-ready-topic", metrics.GetEnvOrDefault("NOTIFICATIONS_READY_TOPIC", "notifications.ready"), "Kafka topic for ready notifications")
+	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", metrics.GetEnvOrDefault("CONSUMER_GROUP_ID", "aggregator-group"), "Kafka consumer group ID")
+	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", metrics.GetEnvOrDefault("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable"), "PostgreSQL connection string")
+	flag.StringVar(&cfg.RedisAddr, "redis-addr", metrics.GetEnvOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address")
 	flag.Parse()
 
 	// Set up structured logging
@@ -35,7 +38,8 @@ func main() {
 		"alerts_matched_topic", cfg.AlertsMatchedTopic,
 		"notifications_ready_topic", cfg.NotificationsReadyTopic,
 		"consumer_group_id", cfg.ConsumerGroupID,
-		"postgres_dsn", maskDSN(cfg.PostgresDSN),
+		"postgres_dsn", metrics.MaskDSN(cfg.PostgresDSN),
+		"redis_addr", cfg.RedisAddr,
 	)
 
 	if err := cfg.Validate(); err != nil {
@@ -56,6 +60,7 @@ func main() {
 	}()
 
 	// Initialize database connection
+	slog.Info("Connecting to PostgreSQL database")
 	db, err := database.NewDB(cfg.PostgresDSN)
 	if err != nil {
 		slog.Error("Failed to connect to database", "error", err)
@@ -63,6 +68,23 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+	slog.Info("Successfully connected to PostgreSQL database")
+
+	// Initialize Redis client for metrics
+	slog.Info("Connecting to Redis", "addr", cfg.RedisAddr)
+	redisClient, err := metrics.ConnectRedis(ctx, cfg.RedisAddr)
+	if err != nil {
+		slog.Error("Failed to connect to Redis", "error", err)
+		slog.Info("Tip: Start Redis with 'docker compose up -d redis'")
+		os.Exit(1)
+	}
+	defer redisClient.Close()
+	slog.Info("Successfully connected to Redis")
+
+	// Initialize metrics collector
+	metricsCollector := metrics.NewCollector("aggregator", redisClient)
+	metricsCollector.Start(ctx)
+	defer metricsCollector.Stop()
 
 	// Initialize Kafka consumer
 	slog.Info("Connecting to Kafka consumer", "topic", cfg.AlertsMatchedTopic)
@@ -85,8 +107,8 @@ func main() {
 	defer kafkaProducer.Close()
 	slog.Info("Successfully connected to Kafka producer")
 
-	// Initialize processor
-	proc := processor.NewProcessor(kafkaConsumer, kafkaProducer, db)
+	// Initialize processor with metrics
+	proc := processor.NewProcessorWithMetrics(kafkaConsumer, kafkaProducer, db, metricsCollector)
 
 	// Main processing loop
 	if err := proc.ProcessNotifications(ctx); err != nil {
@@ -95,23 +117,4 @@ func main() {
 	}
 
 	slog.Info("Aggregator service stopped")
-}
-
-
-// getEnvOrDefault returns the environment variable value or a default value if not set.
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-// maskDSN masks sensitive information in the DSN for logging.
-func maskDSN(dsn string) string {
-	// Simple masking: replace password with ***
-	// This is a basic implementation - in production, use a proper DSN parser
-	if len(dsn) > 50 {
-		return dsn[:20] + "***" + dsn[len(dsn)-20:]
-	}
-	return "***"
 }

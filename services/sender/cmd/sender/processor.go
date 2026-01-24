@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/segmentio/kafka-go"
 
@@ -11,12 +12,14 @@ import (
 	"sender/internal/database"
 	"sender/internal/events"
 	"sender/internal/sender"
+
+	"github.com/afikmenashe/alerting-platform/pkg/metrics"
 )
 
 const workerCount = 10
 
 // processNotifications reads notification ready events from Kafka and processes them concurrently.
-func processNotifications(ctx context.Context, kafkaConsumer *consumer.Consumer, db *database.DB, notifSender *sender.Sender) error {
+func processNotifications(ctx context.Context, kafkaConsumer *consumer.Consumer, db *database.DB, notifSender *sender.Sender, m *metrics.Collector) error {
 	slog.Info("Starting notification processing loop", "workers", workerCount)
 
 	type work struct {
@@ -33,7 +36,7 @@ func processNotifications(ctx context.Context, kafkaConsumer *consumer.Consumer,
 		go func() {
 			defer wg.Done()
 			for job := range jobs {
-				processOne(ctx, db, notifSender, kafkaConsumer, job.ready, job.msg)
+				processOne(ctx, db, notifSender, kafkaConsumer, job.ready, job.msg, m)
 			}
 		}()
 	}
@@ -57,16 +60,24 @@ func processNotifications(ctx context.Context, kafkaConsumer *consumer.Consumer,
 				slog.Error("Failed to read notification ready event", "error", err)
 				continue
 			}
+			if m != nil {
+				m.RecordReceived()
+			}
 			jobs <- work{ready: ready, msg: msg}
 		}
 	}
 }
 
 // processOne handles a single notification: fetch, send, update status, commit.
-func processOne(ctx context.Context, db *database.DB, notifSender *sender.Sender, kafkaConsumer *consumer.Consumer, ready *events.NotificationReady, msg *kafka.Message) {
+func processOne(ctx context.Context, db *database.DB, notifSender *sender.Sender, kafkaConsumer *consumer.Consumer, ready *events.NotificationReady, msg *kafka.Message, m *metrics.Collector) {
+	startTime := time.Now()
+
 	notification, err := db.GetNotification(ctx, ready.NotificationID)
 	if err != nil {
 		slog.Error("Failed to fetch notification", "notification_id", ready.NotificationID, "error", err)
+		if m != nil {
+			m.RecordError()
+		}
 		return
 	}
 
@@ -76,6 +87,9 @@ func processOne(ctx context.Context, db *database.DB, notifSender *sender.Sender
 			"notification_id", ready.NotificationID,
 			"status", notification.Status,
 		)
+		if m != nil {
+			m.IncrementCustom("notifications_skipped")
+		}
 		if err := kafkaConsumer.CommitMessage(ctx, msg); err != nil {
 			slog.Error("Failed to commit offset", "error", err)
 		}
@@ -85,6 +99,9 @@ func processOne(ctx context.Context, db *database.DB, notifSender *sender.Sender
 	endpoints, err := db.GetEndpointsByRuleIDs(ctx, notification.RuleIDs)
 	if err != nil {
 		slog.Error("Failed to fetch endpoints", "notification_id", ready.NotificationID, "error", err)
+		if m != nil {
+			m.RecordError()
+		}
 		return
 	}
 
@@ -97,8 +114,17 @@ func processOne(ctx context.Context, db *database.DB, notifSender *sender.Sender
 				"notification_id", ready.NotificationID,
 				"error", updateErr,
 			)
+			if m != nil {
+				m.RecordError()
+			}
 			// Don't commit - will retry on redelivery
 			return
+		}
+
+		if m != nil {
+			m.RecordProcessed(time.Since(startTime)) // Record latency even for failures
+			m.RecordError()
+			m.IncrementCustom("notifications_failed")
 		}
 
 		slog.Warn("Notification marked as FAILED (DLQ)",
@@ -117,7 +143,16 @@ func processOne(ctx context.Context, db *database.DB, notifSender *sender.Sender
 
 	if err := db.UpdateNotificationStatus(ctx, ready.NotificationID, "SENT"); err != nil {
 		slog.Error("Failed to update notification status", "notification_id", ready.NotificationID, "error", err)
+		if m != nil {
+			m.RecordError()
+		}
 		return
+	}
+
+	if m != nil {
+		m.RecordProcessed(time.Since(startTime))
+		m.RecordPublished() // Count as "published" when successfully sent
+		m.IncrementCustom("notifications_sent")
 	}
 
 	slog.Info("Successfully sent notification",

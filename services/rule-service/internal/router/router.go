@@ -24,7 +24,10 @@ func NewRouter(h *handlers.Handlers) *Router {
 	return r
 }
 
-// Handler returns the HTTP handler with CORS middleware applied.
+// Handler returns the HTTP handler with CORS and metrics middleware applied.
 func (r *Router) Handler() http.Handler {
-	return corsMiddleware(r.mux)
+	// Apply middleware in order: metrics -> cors -> handler
+	handler := corsMiddleware(r.mux)
+	handler = metricsMiddleware(r.handlers.GetMetricsCollector())(handler)
+	return handler
 }

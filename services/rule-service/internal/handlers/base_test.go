@@ -11,11 +11,11 @@ import (
 // TestNewHandlers tests the NewHandlers constructor.
 func TestNewHandlers(t *testing.T) {
 	// Create mock dependencies
-	db := &database.DB{} // Note: This is a nil pointer, but we're just testing the constructor
+	db := &database.DB{}         // Note: This is a nil pointer, but we're just testing the constructor
 	prod := &producer.Producer{} // Note: This is a nil pointer, but we're just testing the constructor
 
-	// Test constructor
-	h := NewHandlers(db, prod)
+	// Test constructor (metricsReader and metricsCollector can be nil)
+	h := NewHandlers(db, prod, nil, nil)
 	if h == nil {
 		t.Fatal("NewHandlers() returned nil")
 	}

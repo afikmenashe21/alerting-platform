@@ -6,11 +6,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"rule-updater/internal/consumer"
 	"rule-updater/internal/database"
 	"rule-updater/internal/events"
 	"rule-updater/internal/snapshot"
+
+	"github.com/afikmenashe/alerting-platform/pkg/metrics"
 )
 
 // Processor orchestrates rule change processing and snapshot updates.
@@ -18,14 +21,26 @@ type Processor struct {
 	consumer *consumer.Consumer
 	db       *database.DB
 	writer   *snapshot.Writer
+	metrics  *metrics.Collector
 }
 
-// NewProcessor creates a new rule change processor.
+// NewProcessor creates a new rule change processor (without metrics).
 func NewProcessor(consumer *consumer.Consumer, db *database.DB, writer *snapshot.Writer) *Processor {
 	return &Processor{
 		consumer: consumer,
 		db:       db,
 		writer:   writer,
+		metrics:  nil,
+	}
+}
+
+// NewProcessorWithMetrics creates a processor with shared metrics collector.
+func NewProcessorWithMetrics(consumer *consumer.Consumer, db *database.DB, writer *snapshot.Writer, m *metrics.Collector) *Processor {
+	return &Processor{
+		consumer: consumer,
+		db:       db,
+		writer:   writer,
+		metrics:  m,
 	}
 }
 
@@ -52,6 +67,12 @@ func (p *Processor) ProcessRuleChanges(ctx context.Context) error {
 				continue
 			}
 
+			if p.metrics != nil {
+				p.metrics.RecordReceived()
+			}
+
+			startTime := time.Now()
+
 			slog.Info("Received rule.changed event",
 				"rule_id", ruleChanged.RuleID,
 				"client_id", ruleChanged.ClientID,
@@ -66,8 +87,17 @@ func (p *Processor) ProcessRuleChanges(ctx context.Context) error {
 					"action", ruleChanged.Action,
 					"error", err,
 				)
+				if p.metrics != nil {
+					p.metrics.RecordError()
+				}
 				// Don't commit offset on error - Kafka will redeliver
 				continue
+			}
+
+			if p.metrics != nil {
+				p.metrics.RecordProcessed(time.Since(startTime))
+				p.metrics.RecordPublished() // Track Redis write as "published"
+				p.metrics.IncrementCustom("rules_" + string(ruleChanged.Action))
 			}
 
 			slog.Info("Rule change applied directly to Redis",

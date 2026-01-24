@@ -19,6 +19,7 @@ type Config struct {
 	SeverityDist string
 	SourceDist   string
 	NameDist     string
+	RedisAddr    string
 }
 
 // Validate checks that all required configuration fields are set and have valid values.

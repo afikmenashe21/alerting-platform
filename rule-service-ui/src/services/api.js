@@ -229,6 +229,42 @@ export const notificationsAPI = {
 };
 
 // ============================================================================
+// System Metrics API
+// ============================================================================
+
+export const metricsAPI = {
+  async get() {
+    const url = `${API_BASE_URL}/metrics`;
+    console.log('GET', url);
+    const response = await fetch(url);
+    console.log('Response status:', response.status);
+    return handleResponse(response);
+  },
+};
+
+// ============================================================================
+// Service Metrics API
+// ============================================================================
+
+export const serviceMetricsAPI = {
+  async getAll() {
+    const url = `${API_BASE_URL}/services/metrics`;
+    console.log('GET', url);
+    const response = await fetch(url);
+    console.log('Response status:', response.status);
+    return handleResponse(response);
+  },
+
+  async getService(serviceName) {
+    const url = `${API_BASE_URL}/services/metrics?service=${serviceName}`;
+    console.log('GET', url);
+    const response = await fetch(url);
+    console.log('Response status:', response.status);
+    return handleResponse(response);
+  },
+};
+
+// ============================================================================
 // Alert Generator API (alert-producer)
 // ============================================================================
 
