@@ -3,12 +3,19 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"alert-producer/internal/api"
+
+	"github.com/afikmenashe/alerting-platform/pkg/metrics"
+	"github.com/afikmenashe/alerting-platform/pkg/shared"
 )
 
 func main() {
@@ -19,10 +26,39 @@ func main() {
 	slog.SetDefault(logger)
 
 	var (
-		port              = flag.String("port", envOrDefault("PORT", "8082"), "HTTP server port")
+		port                = flag.String("port", envOrDefault("PORT", "8082"), "HTTP server port")
 		defaultKafkaBrokers = flag.String("kafka-brokers", envOrDefault("KAFKA_BROKERS", "localhost:9092"), "Default Kafka broker addresses")
+		redisAddr           = flag.String("redis-addr", envOrDefault("REDIS_ADDR", ""), "Redis server address for metrics")
 	)
 	flag.Parse()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		slog.Info("Received shutdown signal, shutting down gracefully...")
+		cancel()
+	}()
+
+	// Initialize Redis client for metrics (optional)
+	var metricsCollector *metrics.Collector
+	if *redisAddr != "" {
+		slog.Info("Connecting to Redis for metrics", "addr", *redisAddr)
+		redisClient, err := shared.ConnectRedis(ctx, *redisAddr)
+		if err != nil {
+			slog.Warn("Failed to connect to Redis, metrics will be disabled", "error", err)
+		} else {
+			slog.Info("Successfully connected to Redis")
+			metricsCollector = metrics.NewCollector("alert-producer", redisClient)
+			metricsCollector.Start(ctx)
+			defer metricsCollector.Stop()
+			defer redisClient.Close()
+		}
+	}
 
 	// Create job manager
 	jm := api.NewJobManager()
@@ -35,13 +71,15 @@ func main() {
 	mux.HandleFunc("/api/v1/alerts/generate/status", api.HandleGetJob(jm))
 	mux.HandleFunc("/api/v1/alerts/generate/stop", api.HandleStopJob(jm))
 
-	// CORS middleware
+	// Apply middleware: CORS first, then metrics
 	handler := corsMiddleware(mux)
+	handler = metricsMiddleware(metricsCollector)(handler)
 
 	addr := ":" + *port
 	slog.Info("Starting alert-producer API server",
 		"port", *port,
 		"kafka_brokers", *defaultKafkaBrokers,
+		"redis_addr", *redisAddr,
 	)
 
 	if err := http.ListenAndServe(addr, handler); err != nil {
@@ -72,4 +110,49 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// responseWriter wraps http.ResponseWriter to capture status code.
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+// metricsMiddleware tracks HTTP request metrics.
+func metricsMiddleware(collector *metrics.Collector) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if collector == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Skip health endpoint
+			if r.URL.Path == "/health" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			collector.RecordReceived()
+			start := time.Now()
+
+			wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+			next.ServeHTTP(wrapped, r)
+
+			latency := time.Since(start)
+
+			if wrapped.statusCode >= 400 {
+				collector.RecordError()
+			} else {
+				collector.RecordProcessed(latency)
+			}
+
+			collector.IncrementCustom("http_" + r.Method)
+		})
+	}
 }
