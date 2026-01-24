@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"sync"
+	"time"
 )
 
 // EmailRequest represents an email to be sent.
@@ -31,20 +33,54 @@ type Provider interface {
 	IsConfigured() bool
 }
 
-// Registry manages email providers with fallback support.
+// Registry manages email providers with fallback support and rate limiting.
 type Registry struct {
-	mu        sync.RWMutex
-	providers map[string]Provider
-	primary   string   // Primary provider name
-	fallback  []string // Fallback provider names in order
+	mu          sync.RWMutex
+	providers   map[string]Provider
+	primary     string   // Primary provider name
+	fallback    []string // Fallback provider names in order
+	rateLimiter chan struct{} // Token bucket for rate limiting
 }
 
-// NewRegistry creates a new email provider registry.
+// NewRegistry creates a new email provider registry with rate limiting.
 func NewRegistry() *Registry {
-	return &Registry{
-		providers: make(map[string]Provider),
-		fallback:  make([]string, 0),
+	// Rate limit: emails per second (default 2 for Resend free tier)
+	emailsPerSecond := 2
+	if val := os.Getenv("EMAIL_RATE_LIMIT"); val != "" {
+		if i, err := strconv.Atoi(val); err == nil && i > 0 {
+			emailsPerSecond = i
+		}
 	}
+
+	r := &Registry{
+		providers:   make(map[string]Provider),
+		fallback:    make([]string, 0),
+		rateLimiter: make(chan struct{}, emailsPerSecond),
+	}
+
+	// Start token replenisher
+	go func() {
+		interval := time.Second / time.Duration(emailsPerSecond)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			select {
+			case r.rateLimiter <- struct{}{}:
+				// Added token
+			default:
+				// Bucket full
+			}
+		}
+	}()
+
+	// Pre-fill the bucket
+	for i := 0; i < emailsPerSecond; i++ {
+		r.rateLimiter <- struct{}{}
+	}
+
+	slog.Info("Email rate limiter initialized", "emails_per_second", emailsPerSecond)
+	return r
 }
 
 // Register adds a provider to the registry.
@@ -124,11 +160,19 @@ func (r *Registry) GetPrimary() (Provider, error) {
 	return nil, fmt.Errorf("no configured email provider available")
 }
 
-// Send sends an email using the best available provider.
+// Send sends an email using the best available provider with rate limiting.
 func (r *Registry) Send(ctx context.Context, req *EmailRequest) error {
 	provider, err := r.GetPrimary()
 	if err != nil {
 		return err
+	}
+
+	// Wait for rate limiter token before sending
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-r.rateLimiter:
+		// Got token, proceed with send
 	}
 
 	err = provider.Send(ctx, req)
@@ -149,6 +193,14 @@ func (r *Registry) Send(ctx context.Context, req *EmailRequest) error {
 				"fallback", name,
 				"error", err,
 			)
+
+			// Wait for another token for fallback attempt
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-r.rateLimiter:
+				// Got token
+			}
 
 			if fallbackErr := p.Send(ctx, req); fallbackErr == nil {
 				return nil // Success with fallback
