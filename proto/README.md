@@ -94,7 +94,7 @@ When modifying `.proto` files:
 5. **Check for breaking changes** - Run `make proto-breaking` before committing
 6. **Verify generated code** - Run `make proto-verify-generated` to ensure code is current
 
-See the [Protobuf Integration Strategy](../docs/architecture/PROTOBUF_INTEGRATION_STRATEGY.md) for migration details.
+See [Protobuf Tooling](../docs/architecture/PROTOBUF_TOOLING.md) for detailed tooling and validation documentation.
 
 ## Buf Configuration
 

@@ -356,4 +356,4 @@ Potential improvements for future consideration:
 - [Buf Documentation](https://buf.build/docs/)
 - [Protobuf Style Guide](https://protobuf.dev/programming-guides/style/)
 - [Schema Evolution Best Practices](https://protobuf.dev/programming-guides/dos-donts/)
-- [Project Proto Integration Strategy](./PROTOBUF_INTEGRATION_STRATEGY.md)
+- [Protobuf Enum Design Decision](./PROTOBUF_ENUM_DESIGN.md)

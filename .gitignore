@@ -51,3 +51,7 @@ temp/
 crash.log
 terraform.tfvars
 *.auto.tfvars
+tfplan
+
+# Coverage HTML reports
+coverage.html

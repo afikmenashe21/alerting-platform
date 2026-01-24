@@ -3,7 +3,7 @@
 Complete guides for deploying the alerting platform to production on AWS.
 
 **Current Status**: ✅ **DEPLOYED** to AWS ECS (2026-01-22)  
-See [`CURRENT_STATUS.md`](CURRENT_STATUS.md) for deployment status and next steps.
+See [`PRODUCTION_DEPLOYMENT.md`](PRODUCTION_DEPLOYMENT.md) for the complete deployment guide.
 
 ## Quick Links
 

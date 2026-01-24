@@ -223,9 +223,8 @@ Disabled Application Load Balancer to reduce costs.
 
 ## Documentation Created
 
-1. **CURRENT_STATUS.md** - Current deployment status
-2. **LESSONS_LEARNED.md** - This document
-3. **Memory Bank updates** - Captured all decisions and issues
+1. **LESSONS_LEARNED.md** - This document
+2. **Memory Bank updates** - Captured all decisions and issues
 
 ## Next Time
 

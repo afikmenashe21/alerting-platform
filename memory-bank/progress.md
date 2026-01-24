@@ -311,7 +311,7 @@
     - Simpler code: no conversion helpers needed, single source of truth
     - This ensures rule matching works correctly (was causing "No rules matched alert" errors)
   - Comprehensive documentation:
-    - Strategy: `docs/architecture/PROTOBUF_INTEGRATION_STRATEGY.md`
     - Tooling: `docs/architecture/PROTOBUF_TOOLING.md`
+    - Enum design: `docs/architecture/PROTOBUF_ENUM_DESIGN.md`
     - Usage guide: `proto/README.md`
   - Benefits: Binary serialization, type safety, schema evolution, reduced message size

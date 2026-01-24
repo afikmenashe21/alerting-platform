@@ -6,7 +6,7 @@ A multi-service Go application implementing an end-to-end alert notification pla
 
 ## Quick Start
 
-**Production Deployment**: See [`docs/deployment/CURRENT_STATUS.md`](docs/deployment/CURRENT_STATUS.md) for AWS ECS deployment status and next steps.
+**Production Deployment**: See [`docs/deployment/README.md`](docs/deployment/README.md) for AWS ECS deployment guides and status.
 
 **Local Development**:
 
@@ -85,11 +85,11 @@ Documentation is organized in the `docs/` directory:
 
 - **Guides** (`docs/guides/`):
   - `SETUP.md` - Complete local setup guide
-  - `QUICKSTART.md` - Quick start instructions
 
 - **Architecture** (`docs/architecture/`):
   - `INFRASTRUCTURE.md` - Infrastructure management details
-  - `PROTOBUF_INTEGRATION_STRATEGY.md` - Protobuf design
+  - `PROTOBUF_TOOLING.md` - Protobuf tooling and validation
+  - `PROTOBUF_ENUM_DESIGN.md` - Protobuf enum design decision
 
 - **Features** (`docs/features/`):
   - `WILDCARD_RULES_DESIGN.md` - Wildcard rules design

@@ -155,7 +155,7 @@ echo ""
 
 echo "7. Checking Documentation"
 echo "-------------------------"
-check_path "docs/architecture/PROTOBUF_INTEGRATION_STRATEGY.md"
+check_path "docs/architecture/PROTOBUF_TOOLING.md"
 echo ""
 
 echo "8. Testing Go Module Structure"

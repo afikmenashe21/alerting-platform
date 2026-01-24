@@ -7,14 +7,14 @@ This directory contains all project documentation organized by category.
 Step-by-step guides for getting started and using the platform:
 
 - **[SETUP.md](guides/SETUP.md)** - Complete setup guide with detailed instructions
-- **[QUICKSTART.md](guides/QUICKSTART.md)** - Quick start guide for rapid setup
 
 ## 🏗️ Architecture (`architecture/`)
 
 Architecture and infrastructure documentation:
 
 - **[INFRASTRUCTURE.md](architecture/INFRASTRUCTURE.md)** - Centralized infrastructure management details
-- **[MIGRATION_TO_CENTRALIZED.md](architecture/MIGRATION_TO_CENTRALIZED.md)** - Guide for migrating to centralized infrastructure
+- **[PROTOBUF_TOOLING.md](architecture/PROTOBUF_TOOLING.md)** - Protobuf tooling and validation setup
+- **[PROTOBUF_ENUM_DESIGN.md](architecture/PROTOBUF_ENUM_DESIGN.md)** - Protobuf enum design decision
 
 ## ✨ Features (`features/`)
 
