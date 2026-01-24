@@ -69,8 +69,8 @@ export default function Notifications() {
 
   const loadClients = async () => {
     try {
-      const data = await clientsAPI.list();
-      setClients(data || []);
+      const data = await clientsAPI.list(200, 0);
+      setClients(data?.clients || []);
     } catch (err) {
       console.error('Failed to load clients:', err);
     }

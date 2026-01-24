@@ -322,6 +322,37 @@ Extracted metrics API from rule-service to a dedicated metrics-service for bette
 - Build Docker image: `docker build -t metrics-service -f services/metrics-service/Dockerfile .`
 - Requires access to PostgreSQL (read-only) and Redis
 
+## Pagination for Clients, Rules, and Endpoints (2026-01-24)
+
+Added pagination support to clients, rules, and endpoints APIs to avoid fetching thousands of rows at once:
+
+### Backend Changes (rule-service)
+- **Database layer**: Updated `ListClients`, `ListRules`, `ListEndpoints` to accept `limit` and `offset` parameters
+- **Types**: Added `ClientListResult`, `RuleListResult`, `EndpointListResult` structs with pagination metadata
+- **Handlers**: Updated to parse `limit` and `offset` query parameters (default: 50, max: 200)
+- **Endpoints filter**: Made `rule_id` optional - can now list all endpoints
+
+### UI Changes (rule-service-ui)
+- **api.js**: Updated `clientsAPI.list()`, `rulesAPI.list()`, `endpointsAPI.list()` to accept pagination params
+- **Clients.jsx**: Added pagination controls (page size selector, page navigation)
+- **Rules.jsx**: Added pagination controls (page size selector, page navigation)  
+- **Endpoints.jsx**: Removed required rule filter, added pagination controls for all endpoints
+
+### API Changes
+- `GET /api/v1/clients?limit=50&offset=0` - Returns `{clients: [...], total: N, limit: 50, offset: 0}`
+- `GET /api/v1/rules?client_id=...&limit=50&offset=0` - Returns `{rules: [...], total: N, limit: 50, offset: 0}`
+- `GET /api/v1/endpoints?rule_id=...&limit=50&offset=0` - Returns `{endpoints: [...], total: N, limit: 50, offset: 0}`
+
+## Bug Fix: stop-all-services.sh (2026-01-24)
+
+Fixed `make stop-all` not stopping the `alert-producer-api` service:
+
+**Root Cause**: The `SERVICES` array in `stop-all-services.sh` had both `"alert-producer"` and `"alert-producer-api"`. However, the `alert-producer` service builds and runs `bin/alert-producer-api` (not `bin/alert-producer`), so `pgrep -f "alert-producer"` didn't match any actual process.
+
+**Fix**: Removed the incorrect `"alert-producer"` entry from the SERVICES array, keeping only `"alert-producer-api"` which matches the actual binary name.
+
+**Files Changed**: `scripts/services/stop-all-services.sh`
+
 ## Code health
 - Completed comprehensive cleanup and modularization across all services:
   - Extracted redundant code patterns (validation, error handling, database scanning)

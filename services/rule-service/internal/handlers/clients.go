@@ -4,6 +4,7 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 )
 
 // CreateClientRequest represents a request to create a client.
@@ -75,19 +76,35 @@ func (h *Handlers) GetClient(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, client)
 }
 
-// ListClients retrieves all clients.
+// ListClients retrieves clients with pagination.
+// Query params: limit (default 50, max 200), offset (default 0)
 func (h *Handlers) ListClients(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
 
+	// Parse pagination parameters
+	limit := 50 // default
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	offset := 0 // default
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
 	ctx := r.Context()
-	clients, err := h.db.ListClients(ctx)
+	result, err := h.db.ListClients(ctx, limit, offset)
 	if err != nil {
 		slog.Error("Failed to list clients", "error", err)
 		http.Error(w, "Failed to list clients", http.StatusInternalServerError)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, clients)
+	writeJSON(w, http.StatusOK, result)
 }

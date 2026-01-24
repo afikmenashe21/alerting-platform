@@ -37,14 +37,14 @@ echo -e "${YELLOW}  Stopping All Services${NC}"
 echo -e "${YELLOW}========================================${NC}"
 echo ""
 
-# Services to stop
+# Services to stop (use actual binary names, not directory names)
+# Note: alert-producer service runs the alert-producer-api binary
 SERVICES=(
     "rule-service"
     "rule-updater"
     "evaluator"
     "aggregator"
     "sender"
-    "alert-producer"
     "alert-producer-api"
     "metrics-service"
 )

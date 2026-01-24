@@ -51,3 +51,27 @@ type Notification struct {
 	CreatedAt      time.Time         `json:"created_at"`
 	UpdatedAt      time.Time         `json:"updated_at"`
 }
+
+// ClientListResult contains paginated client results.
+type ClientListResult struct {
+	Clients []*Client `json:"clients"`
+	Total   int64     `json:"total"`
+	Limit   int       `json:"limit"`
+	Offset  int       `json:"offset"`
+}
+
+// RuleListResult contains paginated rule results.
+type RuleListResult struct {
+	Rules  []*Rule `json:"rules"`
+	Total  int64   `json:"total"`
+	Limit  int     `json:"limit"`
+	Offset int     `json:"offset"`
+}
+
+// EndpointListResult contains paginated endpoint results.
+type EndpointListResult struct {
+	Endpoints []*Endpoint `json:"endpoints"`
+	Total     int64       `json:"total"`
+	Limit     int         `json:"limit"`
+	Offset    int         `json:"offset"`
+}

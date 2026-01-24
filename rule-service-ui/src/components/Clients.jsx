@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { clientsAPI } from '../services/api';
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
 
 export default function Clients() {
   const [clients, setClients] = useState([]);
@@ -9,17 +11,23 @@ export default function Clients() {
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ client_id: '', name: '' });
   const [connectionStatus, setConnectionStatus] = useState('checking');
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   useEffect(() => {
     // Test connection first
     testConnection();
-    loadClients();
   }, []);
 
   const testConnection = async () => {
     try {
       // Try API endpoint through proxy
-      const response = await fetch('/api/v1/clients');
+      const response = await fetch('/api/v1/clients?limit=1');
       console.log('Connection test - Status:', response.status);
       
       // Any response (even 200 with empty array) means service is reachable
@@ -37,25 +45,83 @@ export default function Clients() {
     }
   };
 
-  const loadClients = async () => {
+  const loadClients = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await clientsAPI.list();
+      const offset = (currentPage - 1) * pageSize;
+      console.log('Loading clients, limit:', pageSize, 'offset:', offset);
+      const data = await clientsAPI.list(pageSize, offset);
       console.log('Clients API response:', data);
-      if (Array.isArray(data)) {
+      
+      if (data && data.clients) {
+        setClients(data.clients || []);
+        setTotalCount(data.total || 0);
+        console.log(`Loaded ${data.clients?.length || 0} of ${data.total} clients`);
+      } else if (Array.isArray(data)) {
+        // Fallback for old API format
         setClients(data);
+        setTotalCount(data.length);
       } else {
-        console.warn('Expected array but got:', typeof data, data);
+        console.warn('Unexpected response format:', typeof data, data);
         setClients([]);
+        setTotalCount(0);
       }
     } catch (err) {
       console.error('Error loading clients:', err);
       setError(err.message);
       setClients([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
+  }, [currentPage, pageSize]);
+
+  useEffect(() => {
+    loadClients();
+  }, [loadClients]);
+
+  // Reset to page 1 when page size changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [pageSize]);
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
+  const handlePageSizeChange = (newSize) => {
+    setPageSize(newSize);
+    setCurrentPage(1);
+  };
+
+  // Generate page numbers to display
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      }
+    }
+    return pages;
   };
 
   const handleSubmit = async (e) => {
@@ -122,7 +188,20 @@ export default function Clients() {
       {error && <div className="error">Error: {error}</div>}
       {success && <div className="success">{success}</div>}
 
-      <div className="button-group">
+      <div style={{ marginBottom: '20px', display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div className="form-group" style={{ maxWidth: '120px', marginBottom: 0 }}>
+          <label>Per Page</label>
+          <select
+            value={pageSize}
+            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </div>
         <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
           {showForm ? 'Cancel' : 'Create New Client'}
         </button>
@@ -130,6 +209,13 @@ export default function Clients() {
           Refresh
         </button>
       </div>
+
+      {/* Pagination info */}
+      {totalCount > 0 && (
+        <div style={{ marginBottom: '15px', color: '#666', fontSize: '14px' }}>
+          Showing {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalCount)} of {totalCount} clients
+        </div>
+      )}
 
       {showForm && (
         <form onSubmit={handleSubmit} style={{ marginTop: '20px' }}>
@@ -168,26 +254,93 @@ export default function Clients() {
           <p>No clients found. Create one to get started.</p>
         </div>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Client ID</th>
-              <th>Name</th>
-              <th>Created At</th>
-              <th>Updated At</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clients.map((client) => (
-              <tr key={client.client_id}>
-                <td>{client.client_id}</td>
-                <td>{client.name}</td>
-                <td>{formatDate(client.created_at)}</td>
-                <td>{formatDate(client.updated_at)}</td>
+        <>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Client ID</th>
+                <th>Name</th>
+                <th>Created At</th>
+                <th>Updated At</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {clients.map((client) => (
+                <tr key={client.client_id}>
+                  <td>{client.client_id}</td>
+                  <td>{client.name}</td>
+                  <td>{formatDate(client.created_at)}</td>
+                  <td>{formatDate(client.updated_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Pagination controls */}
+          {totalPages > 1 && (
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              gap: '8px', 
+              marginTop: '20px',
+              flexWrap: 'wrap'
+            }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => handlePageChange(1)}
+                disabled={currentPage === 1}
+                style={{ padding: '6px 12px' }}
+              >
+                First
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                style={{ padding: '6px 12px' }}
+              >
+                Prev
+              </button>
+              
+              {getPageNumbers().map((page, idx) => (
+                page === '...' ? (
+                  <span key={`ellipsis-${idx}`} style={{ padding: '6px 8px', color: '#666' }}>...</span>
+                ) : (
+                  <button
+                    key={page}
+                    className={`btn ${page === currentPage ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => handlePageChange(page)}
+                    style={{ 
+                      padding: '6px 12px',
+                      minWidth: '40px',
+                      fontWeight: page === currentPage ? 'bold' : 'normal'
+                    }}
+                  >
+                    {page}
+                  </button>
+                )
+              ))}
+              
+              <button
+                className="btn btn-secondary"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                style={{ padding: '6px 12px' }}
+              >
+                Next
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => handlePageChange(totalPages)}
+                disabled={currentPage === totalPages}
+                style={{ padding: '6px 12px' }}
+              >
+                Last
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

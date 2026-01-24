@@ -58,28 +58,48 @@ func (db *DB) GetRule(ctx context.Context, ruleID string) (*Rule, error) {
 	return rule, nil
 }
 
-// ListRules retrieves all rules, optionally filtered by client_id.
-func (db *DB) ListRules(ctx context.Context, clientID *string) ([]*Rule, error) {
-	var query string
-	var args []interface{}
-
-	if clientID != nil {
-		query = `
-			SELECT rule_id, client_id, severity, source, name, enabled, version, created_at, updated_at
-			FROM rules
-			WHERE client_id = $1
-			ORDER BY created_at DESC
-		`
-		args = []interface{}{*clientID}
-	} else {
-		query = `
-			SELECT rule_id, client_id, severity, source, name, enabled, version, created_at, updated_at
-			FROM rules
-			ORDER BY created_at DESC
-		`
-		args = []interface{}{}
+// ListRules retrieves rules with pagination, optionally filtered by client_id.
+// Default limit is 50, max limit is 200.
+func (db *DB) ListRules(ctx context.Context, clientID *string, limit, offset int) (*RuleListResult, error) {
+	// Apply default and max limits
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
 	}
 
+	// Build WHERE clause
+	whereClause := ""
+	var countArgs []interface{}
+	argIndex := 1
+
+	if clientID != nil {
+		whereClause = fmt.Sprintf("WHERE client_id = $%d", argIndex)
+		countArgs = append(countArgs, *clientID)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM rules %s", whereClause)
+	var total int64
+	if err := db.conn.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("failed to count rules: %w", err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT rule_id, client_id, severity, source, name, enabled, version, created_at, updated_at
+		FROM rules
+		%s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, argIndex, argIndex+1)
+
+	args := append(countArgs, limit, offset)
 	rows, err := db.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list rules: %w", err)
@@ -94,7 +114,17 @@ func (db *DB) ListRules(ctx context.Context, clientID *string) ([]*Rule, error) 
 		}
 		rules = append(rules, rule)
 	}
-	return rules, rows.Err()
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &RuleListResult{
+		Rules:  rules,
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	}, nil
 }
 
 // UpdateRule updates a rule with optimistic locking.

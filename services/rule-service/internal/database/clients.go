@@ -51,14 +51,34 @@ func (db *DB) GetClient(ctx context.Context, clientID string) (*Client, error) {
 	return &client, nil
 }
 
-// ListClients retrieves all clients.
-func (db *DB) ListClients(ctx context.Context) ([]*Client, error) {
+// ListClients retrieves clients with pagination.
+// Default limit is 50, max limit is 200.
+func (db *DB) ListClients(ctx context.Context, limit, offset int) (*ClientListResult, error) {
+	// Apply default and max limits
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Get total count
+	var total int64
+	if err := db.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM clients").Scan(&total); err != nil {
+		return nil, fmt.Errorf("failed to count clients: %w", err)
+	}
+
+	// Get paginated results
 	query := `
 		SELECT client_id, name, created_at, updated_at
 		FROM clients
 		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
 	`
-	rows, err := db.conn.QueryContext(ctx, query)
+	rows, err := db.conn.QueryContext(ctx, query, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list clients: %w", err)
 	}
@@ -77,5 +97,15 @@ func (db *DB) ListClients(ctx context.Context) ([]*Client, error) {
 		}
 		clients = append(clients, &client)
 	}
-	return clients, rows.Err()
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &ClientListResult{
+		Clients: clients,
+		Total:   total,
+		Limit:   limit,
+		Offset:  offset,
+	}, nil
 }

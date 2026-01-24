@@ -105,6 +105,12 @@
 - [x] All tests passing for both services
 
 ## Performance Scaling & Load Testing (2026-01-24)
+- [x] **Full Pagination for All List APIs**: Added limit/offset pagination to clients, rules, and endpoints
+  - Updated `ListClients`, `ListRules`, `ListEndpoints` in database layer with pagination
+  - Added `ClientListResult`, `RuleListResult`, `EndpointListResult` types with total count
+  - Updated handlers to parse limit/offset query params (default 50, max 200)
+  - Made endpoints `rule_id` filter optional - can now view all endpoints
+  - Updated UI components with page size selector and navigation controls
 - [x] **Notification Pagination**: Added limit/offset pagination to notifications API
   - Updated `ListNotifications` handler with query params (limit, offset)
   - Database returns `NotificationListResult` with total count
@@ -128,6 +134,14 @@
   - Aggregator: ~100 RPS, 5ms latency, 0 errors
   - Sender: ~120 RPS, 0 errors
   - **Total: 100,000 alerts processed with 0 errors**
+
+## Bug Fixes
+
+### stop-all-services.sh not stopping alert-producer-api (2026-01-24)
+- **Problem**: `make stop-all` didn't stop the `alert-producer-api` service
+- **Root Cause**: SERVICES array in `stop-all-services.sh` had both `"alert-producer"` and `"alert-producer-api"`, but the `alert-producer` service builds and runs `bin/alert-producer-api` (not `bin/alert-producer`)
+- **Fix**: Removed incorrect `"alert-producer"` entry, keeping only `"alert-producer-api"` which matches the actual binary name
+- **File**: `scripts/services/stop-all-services.sh`
 
 ## Code health
 - [x] rule-service: comprehensive code cleanup and modularization:

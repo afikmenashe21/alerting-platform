@@ -71,10 +71,9 @@ func (r *Router) setupRoutes() {
 		case http.MethodGet:
 			if req.URL.Query().Get("endpoint_id") != "" {
 				r.handlers.GetEndpoint(w, req)
-			} else if req.URL.Query().Get("rule_id") != "" {
-				r.handlers.ListEndpoints(w, req)
 			} else {
-				http.Error(w, "endpoint_id or rule_id query parameter is required", http.StatusBadRequest)
+				// List endpoints - rule_id filter is optional (supports pagination)
+				r.handlers.ListEndpoints(w, req)
 			}
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

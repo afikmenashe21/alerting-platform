@@ -92,8 +92,21 @@ export const clientsAPI = {
     return handleResponse(response);
   },
 
-  async list() {
-    const response = await fetch(`${API_BASE_URL}/clients`);
+  /**
+   * List clients with pagination
+   * @param {number} limit - Number of items per page (default 50, max 200)
+   * @param {number} offset - Offset for pagination (default 0)
+   * @returns {Promise<{clients: Array, total: number, limit: number, offset: number}>}
+   */
+  async list(limit = 50, offset = 0) {
+    const params = new URLSearchParams();
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+    
+    const url = `${API_BASE_URL}/clients?${params.toString()}`;
+    console.log('GET', url);
+    const response = await fetch(url);
+    console.log('Response status:', response.status);
     return handleResponse(response);
   },
 };
@@ -126,10 +139,20 @@ export const rulesAPI = {
     return handleResponse(response);
   },
 
-  async list(clientId = null) {
-    const url = clientId 
-      ? `${API_BASE_URL}/rules?client_id=${clientId}`
-      : `${API_BASE_URL}/rules`;
+  /**
+   * List rules with pagination
+   * @param {string|null} clientId - Filter by client ID
+   * @param {number} limit - Number of items per page (default 50, max 200)
+   * @param {number} offset - Offset for pagination (default 0)
+   * @returns {Promise<{rules: Array, total: number, limit: number, offset: number}>}
+   */
+  async list(clientId = null, limit = 50, offset = 0) {
+    const params = new URLSearchParams();
+    if (clientId) params.append('client_id', clientId);
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+    
+    const url = `${API_BASE_URL}/rules?${params.toString()}`;
     console.log('GET', url);
     const response = await fetch(url);
     console.log('Response status:', response.status);
@@ -181,8 +204,23 @@ export const endpointsAPI = {
     return handleResponse(response);
   },
 
-  async list(ruleId) {
-    const response = await fetch(`${API_BASE_URL}/endpoints?rule_id=${ruleId}`);
+  /**
+   * List endpoints with pagination
+   * @param {string|null} ruleId - Filter by rule ID (optional)
+   * @param {number} limit - Number of items per page (default 50, max 200)
+   * @param {number} offset - Offset for pagination (default 0)
+   * @returns {Promise<{endpoints: Array, total: number, limit: number, offset: number}>}
+   */
+  async list(ruleId = null, limit = 50, offset = 0) {
+    const params = new URLSearchParams();
+    if (ruleId) params.append('rule_id', ruleId);
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+    
+    const url = `${API_BASE_URL}/endpoints?${params.toString()}`;
+    console.log('GET', url);
+    const response = await fetch(url);
+    console.log('Response status:', response.status);
     return handleResponse(response);
   },
 

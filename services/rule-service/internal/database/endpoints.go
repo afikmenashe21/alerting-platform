@@ -66,15 +66,49 @@ func (db *DB) GetEndpoint(ctx context.Context, endpointID string) (*Endpoint, er
 	return &endpoint, nil
 }
 
-// ListEndpoints retrieves all endpoints for a rule.
-func (db *DB) ListEndpoints(ctx context.Context, ruleID string) ([]*Endpoint, error) {
-	query := `
+// ListEndpoints retrieves endpoints with pagination, optionally filtered by rule_id.
+// Default limit is 50, max limit is 200.
+func (db *DB) ListEndpoints(ctx context.Context, ruleID *string, limit, offset int) (*EndpointListResult, error) {
+	// Apply default and max limits
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Build WHERE clause
+	whereClause := ""
+	var countArgs []interface{}
+	argIndex := 1
+
+	if ruleID != nil {
+		whereClause = fmt.Sprintf("WHERE rule_id = $%d", argIndex)
+		countArgs = append(countArgs, *ruleID)
+		argIndex++
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM endpoints %s", whereClause)
+	var total int64
+	if err := db.conn.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("failed to count endpoints: %w", err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
 		SELECT endpoint_id, rule_id, type, value, enabled, created_at, updated_at
 		FROM endpoints
-		WHERE rule_id = $1
-		ORDER BY created_at ASC
-	`
-	rows, err := db.conn.QueryContext(ctx, query, ruleID)
+		%s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, argIndex, argIndex+1)
+
+	args := append(countArgs, limit, offset)
+	rows, err := db.conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list endpoints: %w", err)
 	}
@@ -96,7 +130,17 @@ func (db *DB) ListEndpoints(ctx context.Context, ruleID string) ([]*Endpoint, er
 		}
 		endpoints = append(endpoints, &endpoint)
 	}
-	return endpoints, rows.Err()
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &EndpointListResult{
+		Endpoints: endpoints,
+		Total:     total,
+		Limit:     limit,
+		Offset:    offset,
+	}, nil
 }
 
 // UpdateEndpoint updates an endpoint.

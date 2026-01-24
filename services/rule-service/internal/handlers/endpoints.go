@@ -4,6 +4,7 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 )
 
 // CreateEndpointRequest represents a request to create an endpoint.
@@ -91,26 +92,43 @@ func (h *Handlers) GetEndpoint(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, endpoint)
 }
 
-// ListEndpoints retrieves all endpoints for a rule.
+// ListEndpoints retrieves endpoints with pagination, optionally filtered by rule_id.
+// Query params: rule_id (optional), limit (default 50, max 200), offset (default 0)
 func (h *Handlers) ListEndpoints(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
 
-	ruleID, ok := requireQueryParam(w, r, "rule_id")
-	if !ok {
-		return
+	ruleID := r.URL.Query().Get("rule_id")
+	var ruleIDPtr *string
+	if ruleID != "" {
+		ruleIDPtr = &ruleID
+	}
+
+	// Parse pagination parameters
+	limit := 50 // default
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	offset := 0 // default
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
 	}
 
 	ctx := r.Context()
-	endpoints, err := h.db.ListEndpoints(ctx, ruleID)
+	result, err := h.db.ListEndpoints(ctx, ruleIDPtr, limit, offset)
 	if err != nil {
 		slog.Error("Failed to list endpoints", "error", err, "rule_id", ruleID)
 		http.Error(w, "Failed to list endpoints", http.StatusInternalServerError)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, endpoints)
+	writeJSON(w, http.StatusOK, result)
 }
 
 // UpdateEndpoint updates an endpoint.

@@ -205,7 +205,7 @@ func TestDB_GetClient(t *testing.T) {
 	}
 }
 
-// TestDB_ListClients tests ListClients.
+// TestDB_ListClients tests ListClients with pagination.
 func TestDB_ListClients(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -217,18 +217,24 @@ func TestDB_ListClients(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful list", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 		rows := sqlmock.NewRows([]string{"client_id", "name", "created_at", "updated_at"}).
 			AddRow("client-1", "Client 1", time.Now(), time.Now()).
 			AddRow("client-2", "Client 2", time.Now(), time.Now())
 		mock.ExpectQuery("SELECT client_id, name, created_at, updated_at").
+			WithArgs(50, 0).
 			WillReturnRows(rows)
 
-		clients, err := d.ListClients(ctx)
+		result, err := d.ListClients(ctx, 50, 0)
 		if err != nil {
 			t.Errorf("ListClients() error = %v", err)
 		}
-		if len(clients) != 2 {
-			t.Errorf("ListClients() returned %d clients, want 2", len(clients))
+		if len(result.Clients) != 2 {
+			t.Errorf("ListClients() returned %d clients, want 2", len(result.Clients))
+		}
+		if result.Total != 2 {
+			t.Errorf("ListClients() total = %d, want 2", result.Total)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Mock expectations were not met: %v", err)
@@ -236,27 +242,49 @@ func TestDB_ListClients(t *testing.T) {
 	})
 
 	t.Run("empty list", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 		rows := sqlmock.NewRows([]string{"client_id", "name", "created_at", "updated_at"})
 		mock.ExpectQuery("SELECT client_id, name, created_at, updated_at").
+			WithArgs(50, 0).
 			WillReturnRows(rows)
 
-		clients, err := d.ListClients(ctx)
+		result, err := d.ListClients(ctx, 50, 0)
 		if err != nil {
 			t.Errorf("ListClients() error = %v", err)
 		}
-		if len(clients) != 0 {
-			t.Errorf("ListClients() returned %d clients, want 0", len(clients))
+		if len(result.Clients) != 0 {
+			t.Errorf("ListClients() returned %d clients, want 0", len(result.Clients))
+		}
+		if result.Total != 0 {
+			t.Errorf("ListClients() total = %d, want 0", result.Total)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Mock expectations were not met: %v", err)
 		}
 	})
 
-	t.Run("database error", func(t *testing.T) {
-		mock.ExpectQuery("SELECT client_id, name, created_at, updated_at").
+	t.Run("database error on count", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT").
 			WillReturnError(sql.ErrConnDone)
 
-		_, err := d.ListClients(ctx)
+		_, err := d.ListClients(ctx, 50, 0)
+		if err == nil {
+			t.Error("ListClients() expected error")
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Mock expectations were not met: %v", err)
+		}
+	})
+
+	t.Run("database error on query", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
+		mock.ExpectQuery("SELECT client_id, name, created_at, updated_at").
+			WithArgs(50, 0).
+			WillReturnError(sql.ErrConnDone)
+
+		_, err := d.ListClients(ctx, 50, 0)
 		if err == nil {
 			t.Error("ListClients() expected error")
 		}
@@ -376,7 +404,7 @@ func TestDB_GetRule(t *testing.T) {
 	})
 }
 
-// TestDB_ListRules tests ListRules with and without client filter.
+// TestDB_ListRules tests ListRules with pagination and optional client filter.
 func TestDB_ListRules(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -388,17 +416,23 @@ func TestDB_ListRules(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("list all rules", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 		rows := sqlmock.NewRows([]string{"rule_id", "client_id", "severity", "source", "name", "enabled", "version", "created_at", "updated_at"}).
 			AddRow("rule-1", "client-1", "HIGH", "source-1", "alert-1", true, 1, time.Now(), time.Now())
 		mock.ExpectQuery("SELECT rule_id, client_id, severity, source, name, enabled, version, created_at, updated_at").
+			WithArgs(50, 0).
 			WillReturnRows(rows)
 
-		rules, err := d.ListRules(ctx, nil)
+		result, err := d.ListRules(ctx, nil, 50, 0)
 		if err != nil {
 			t.Errorf("ListRules() error = %v", err)
 		}
-		if len(rules) != 1 {
-			t.Errorf("ListRules() returned %d rules, want 1", len(rules))
+		if len(result.Rules) != 1 {
+			t.Errorf("ListRules() returned %d rules, want 1", len(result.Rules))
+		}
+		if result.Total != 1 {
+			t.Errorf("ListRules() total = %d, want 1", result.Total)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Mock expectations were not met: %v", err)
@@ -406,19 +440,25 @@ func TestDB_ListRules(t *testing.T) {
 	})
 
 	t.Run("list rules by client", func(t *testing.T) {
+		clientID := "client-1"
+		mock.ExpectQuery("SELECT COUNT").
+			WithArgs(clientID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 		rows := sqlmock.NewRows([]string{"rule_id", "client_id", "severity", "source", "name", "enabled", "version", "created_at", "updated_at"}).
 			AddRow("rule-1", "client-1", "HIGH", "source-1", "alert-1", true, 1, time.Now(), time.Now())
-		clientID := "client-1"
 		mock.ExpectQuery("SELECT rule_id, client_id, severity, source, name, enabled, version, created_at, updated_at").
-			WithArgs(clientID).
+			WithArgs(clientID, 50, 0).
 			WillReturnRows(rows)
 
-		rules, err := d.ListRules(ctx, &clientID)
+		result, err := d.ListRules(ctx, &clientID, 50, 0)
 		if err != nil {
 			t.Errorf("ListRules() error = %v", err)
 		}
-		if len(rules) != 1 {
-			t.Errorf("ListRules() returned %d rules, want 1", len(rules))
+		if len(result.Rules) != 1 {
+			t.Errorf("ListRules() returned %d rules, want 1", len(result.Rules))
+		}
+		if result.Total != 1 {
+			t.Errorf("ListRules() total = %d, want 1", result.Total)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Mock expectations were not met: %v", err)
@@ -733,7 +773,7 @@ func TestDB_GetEndpoint(t *testing.T) {
 	})
 }
 
-// TestDB_ListEndpoints tests ListEndpoints.
+// TestDB_ListEndpoints tests ListEndpoints with pagination and optional rule filter.
 func TestDB_ListEndpoints(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -744,19 +784,50 @@ func TestDB_ListEndpoints(t *testing.T) {
 	d := &DB{conn: db}
 	ctx := context.Background()
 
-	t.Run("successful list", func(t *testing.T) {
+	t.Run("list all endpoints", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 		rows := sqlmock.NewRows([]string{"endpoint_id", "rule_id", "type", "value", "enabled", "created_at", "updated_at"}).
 			AddRow("endpoint-1", "rule-1", "email", "test@example.com", true, time.Now(), time.Now())
 		mock.ExpectQuery("SELECT endpoint_id, rule_id, type, value, enabled, created_at, updated_at").
-			WithArgs("rule-1").
+			WithArgs(50, 0).
 			WillReturnRows(rows)
 
-		endpoints, err := d.ListEndpoints(ctx, "rule-1")
+		result, err := d.ListEndpoints(ctx, nil, 50, 0)
 		if err != nil {
 			t.Errorf("ListEndpoints() error = %v", err)
 		}
-		if len(endpoints) != 1 {
-			t.Errorf("ListEndpoints() returned %d endpoints, want 1", len(endpoints))
+		if len(result.Endpoints) != 1 {
+			t.Errorf("ListEndpoints() returned %d endpoints, want 1", len(result.Endpoints))
+		}
+		if result.Total != 1 {
+			t.Errorf("ListEndpoints() total = %d, want 1", result.Total)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Mock expectations were not met: %v", err)
+		}
+	})
+
+	t.Run("list endpoints by rule", func(t *testing.T) {
+		ruleID := "rule-1"
+		mock.ExpectQuery("SELECT COUNT").
+			WithArgs(ruleID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+		rows := sqlmock.NewRows([]string{"endpoint_id", "rule_id", "type", "value", "enabled", "created_at", "updated_at"}).
+			AddRow("endpoint-1", "rule-1", "email", "test@example.com", true, time.Now(), time.Now())
+		mock.ExpectQuery("SELECT endpoint_id, rule_id, type, value, enabled, created_at, updated_at").
+			WithArgs(ruleID, 50, 0).
+			WillReturnRows(rows)
+
+		result, err := d.ListEndpoints(ctx, &ruleID, 50, 0)
+		if err != nil {
+			t.Errorf("ListEndpoints() error = %v", err)
+		}
+		if len(result.Endpoints) != 1 {
+			t.Errorf("ListEndpoints() returned %d endpoints, want 1", len(result.Endpoints))
+		}
+		if result.Total != 1 {
+			t.Errorf("ListEndpoints() total = %d, want 1", result.Total)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Mock expectations were not met: %v", err)
@@ -971,7 +1042,7 @@ func TestDB_GetNotification(t *testing.T) {
 	})
 }
 
-// TestDB_ListNotifications tests ListNotifications with various filters.
+// TestDB_ListNotifications tests ListNotifications with pagination and various filters.
 func TestDB_ListNotifications(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -983,17 +1054,23 @@ func TestDB_ListNotifications(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("list all", func(t *testing.T) {
+		mock.ExpectQuery("SELECT COUNT").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 		rows := sqlmock.NewRows([]string{"notification_id", "client_id", "alert_id", "severity", "source", "name", "context", "rule_ids", "status", "created_at", "updated_at"}).
 			AddRow("notif-1", "client-1", "alert-1", "HIGH", "source-1", "alert-1", nil, pq.Array([]string{"rule-1"}), "RECEIVED", time.Now(), time.Now())
 		mock.ExpectQuery("SELECT notification_id, client_id, alert_id, severity, source, name, context, rule_ids, status, created_at, updated_at").
+			WithArgs(50, 0).
 			WillReturnRows(rows)
 
-		notifs, err := d.ListNotifications(ctx, nil, nil)
+		result, err := d.ListNotifications(ctx, nil, nil, 50, 0)
 		if err != nil {
 			t.Errorf("ListNotifications() error = %v", err)
 		}
-		if len(notifs) != 1 {
-			t.Errorf("ListNotifications() returned %d notifications, want 1", len(notifs))
+		if len(result.Notifications) != 1 {
+			t.Errorf("ListNotifications() returned %d notifications, want 1", len(result.Notifications))
+		}
+		if result.Total != 1 {
+			t.Errorf("ListNotifications() total = %d, want 1", result.Total)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Mock expectations were not met: %v", err)
@@ -1002,18 +1079,24 @@ func TestDB_ListNotifications(t *testing.T) {
 
 	t.Run("list by client", func(t *testing.T) {
 		clientID := "client-1"
+		mock.ExpectQuery("SELECT COUNT").
+			WithArgs(clientID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 		rows := sqlmock.NewRows([]string{"notification_id", "client_id", "alert_id", "severity", "source", "name", "context", "rule_ids", "status", "created_at", "updated_at"}).
 			AddRow("notif-1", "client-1", "alert-1", "HIGH", "source-1", "alert-1", nil, pq.Array([]string{"rule-1"}), "RECEIVED", time.Now(), time.Now())
 		mock.ExpectQuery("SELECT notification_id, client_id, alert_id, severity, source, name, context, rule_ids, status, created_at, updated_at").
-			WithArgs(clientID).
+			WithArgs(clientID, 50, 0).
 			WillReturnRows(rows)
 
-		notifs, err := d.ListNotifications(ctx, &clientID, nil)
+		result, err := d.ListNotifications(ctx, &clientID, nil, 50, 0)
 		if err != nil {
 			t.Errorf("ListNotifications() error = %v", err)
 		}
-		if len(notifs) != 1 {
-			t.Errorf("ListNotifications() returned %d notifications, want 1", len(notifs))
+		if len(result.Notifications) != 1 {
+			t.Errorf("ListNotifications() returned %d notifications, want 1", len(result.Notifications))
+		}
+		if result.Total != 1 {
+			t.Errorf("ListNotifications() total = %d, want 1", result.Total)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Mock expectations were not met: %v", err)
@@ -1022,18 +1105,24 @@ func TestDB_ListNotifications(t *testing.T) {
 
 	t.Run("list by status", func(t *testing.T) {
 		status := "RECEIVED"
+		mock.ExpectQuery("SELECT COUNT").
+			WithArgs(status).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 		rows := sqlmock.NewRows([]string{"notification_id", "client_id", "alert_id", "severity", "source", "name", "context", "rule_ids", "status", "created_at", "updated_at"}).
 			AddRow("notif-1", "client-1", "alert-1", "HIGH", "source-1", "alert-1", nil, pq.Array([]string{"rule-1"}), "RECEIVED", time.Now(), time.Now())
 		mock.ExpectQuery("SELECT notification_id, client_id, alert_id, severity, source, name, context, rule_ids, status, created_at, updated_at").
-			WithArgs(status).
+			WithArgs(status, 50, 0).
 			WillReturnRows(rows)
 
-		notifs, err := d.ListNotifications(ctx, nil, &status)
+		result, err := d.ListNotifications(ctx, nil, &status, 50, 0)
 		if err != nil {
 			t.Errorf("ListNotifications() error = %v", err)
 		}
-		if len(notifs) != 1 {
-			t.Errorf("ListNotifications() returned %d notifications, want 1", len(notifs))
+		if len(result.Notifications) != 1 {
+			t.Errorf("ListNotifications() returned %d notifications, want 1", len(result.Notifications))
+		}
+		if result.Total != 1 {
+			t.Errorf("ListNotifications() total = %d, want 1", result.Total)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Mock expectations were not met: %v", err)
@@ -1043,18 +1132,24 @@ func TestDB_ListNotifications(t *testing.T) {
 	t.Run("list by client and status", func(t *testing.T) {
 		clientID := "client-1"
 		status := "RECEIVED"
+		mock.ExpectQuery("SELECT COUNT").
+			WithArgs(clientID, status).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 		rows := sqlmock.NewRows([]string{"notification_id", "client_id", "alert_id", "severity", "source", "name", "context", "rule_ids", "status", "created_at", "updated_at"}).
 			AddRow("notif-1", "client-1", "alert-1", "HIGH", "source-1", "alert-1", nil, pq.Array([]string{"rule-1"}), "RECEIVED", time.Now(), time.Now())
 		mock.ExpectQuery("SELECT notification_id, client_id, alert_id, severity, source, name, context, rule_ids, status, created_at, updated_at").
-			WithArgs(clientID, status).
+			WithArgs(clientID, status, 50, 0).
 			WillReturnRows(rows)
 
-		notifs, err := d.ListNotifications(ctx, &clientID, &status)
+		result, err := d.ListNotifications(ctx, &clientID, &status, 50, 0)
 		if err != nil {
 			t.Errorf("ListNotifications() error = %v", err)
 		}
-		if len(notifs) != 1 {
-			t.Errorf("ListNotifications() returned %d notifications, want 1", len(notifs))
+		if len(result.Notifications) != 1 {
+			t.Errorf("ListNotifications() returned %d notifications, want 1", len(result.Notifications))
+		}
+		if result.Total != 1 {
+			t.Errorf("ListNotifications() total = %d, want 1", result.Total)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Mock expectations were not met: %v", err)
