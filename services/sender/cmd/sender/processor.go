@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"log/slog"
-	"sync"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -16,45 +17,42 @@ import (
 	"github.com/afikmenashe/alerting-platform/pkg/metrics"
 )
 
-const workerCount = 10
+// getEnvInt reads an environment variable as int with a default value.
+func getEnvInt(key string, defaultVal int) int {
+	if val := os.Getenv(key); val != "" {
+		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return defaultVal
+}
 
-// processNotifications reads notification ready events from Kafka and processes them concurrently.
+// processNotifications reads notification ready events from Kafka and processes them sequentially
+// with rate limiting to respect email provider limits (Resend: 2 req/sec, SES: 1 req/sec sandbox).
 func processNotifications(ctx context.Context, kafkaConsumer *consumer.Consumer, db *database.DB, notifSender *sender.Sender, m *metrics.Collector) error {
-	slog.Info("Starting notification processing loop", "workers", workerCount)
+	// Rate limit: emails per second (default 2 for Resend free tier)
+	emailsPerSecond := getEnvInt("EMAIL_RATE_LIMIT", 2)
+	rateLimitInterval := time.Second / time.Duration(emailsPerSecond)
 
-	type work struct {
-		ready *events.NotificationReady
-		msg   *kafka.Message
-	}
+	slog.Info("Starting notification processing loop",
+		"rate_limit", emailsPerSecond,
+		"interval_ms", rateLimitInterval.Milliseconds(),
+	)
 
-	jobs := make(chan work, workerCount*2)
-	var wg sync.WaitGroup
+	// Use a ticker for rate limiting
+	ticker := time.NewTicker(rateLimitInterval)
+	defer ticker.Stop()
 
-	// Start worker goroutines
-	for i := 0; i < workerCount; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for job := range jobs {
-				processOne(ctx, db, notifSender, kafkaConsumer, job.ready, job.msg, m)
-			}
-		}()
-	}
-
-	// Read messages and dispatch to workers
+	// Process messages sequentially with rate limiting
 	for {
 		select {
 		case <-ctx.Done():
-			close(jobs)
-			wg.Wait()
 			slog.Info("Notification processing loop stopped")
 			return nil
 		default:
 			ready, msg, err := kafkaConsumer.ReadMessage(ctx)
 			if err != nil {
 				if ctx.Err() != nil {
-					close(jobs)
-					wg.Wait()
 					return nil
 				}
 				slog.Error("Failed to read notification ready event", "error", err)
@@ -63,7 +61,16 @@ func processNotifications(ctx context.Context, kafkaConsumer *consumer.Consumer,
 			if m != nil {
 				m.RecordReceived()
 			}
-			jobs <- work{ready: ready, msg: msg}
+
+			// Wait for rate limiter before processing
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+				// Rate limit passed, process the notification
+			}
+
+			processOne(ctx, db, notifSender, kafkaConsumer, ready, msg, m)
 		}
 	}
 }

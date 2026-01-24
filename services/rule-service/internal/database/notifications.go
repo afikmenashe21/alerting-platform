@@ -43,43 +43,68 @@ func (db *DB) GetNotification(ctx context.Context, notificationID string) (*Noti
 	return &notif, nil
 }
 
-// ListNotifications retrieves all notifications, optionally filtered by client_id or status.
-func (db *DB) ListNotifications(ctx context.Context, clientID *string, status *string) ([]*Notification, error) {
-	var query string
-	var args []interface{}
+// NotificationListResult contains paginated notification results.
+type NotificationListResult struct {
+	Notifications []*Notification `json:"notifications"`
+	Total         int64           `json:"total"`
+	Limit         int             `json:"limit"`
+	Offset        int             `json:"offset"`
+}
 
-	if clientID != nil && status != nil {
-		query = `
-			SELECT notification_id, client_id, alert_id, severity, source, name, context, rule_ids, status, created_at, updated_at
-			FROM notifications
-			WHERE client_id = $1 AND status = $2
-			ORDER BY created_at DESC
-		`
-		args = []interface{}{*clientID, *status}
-	} else if clientID != nil {
-		query = `
-			SELECT notification_id, client_id, alert_id, severity, source, name, context, rule_ids, status, created_at, updated_at
-			FROM notifications
-			WHERE client_id = $1
-			ORDER BY created_at DESC
-		`
-		args = []interface{}{*clientID}
-	} else if status != nil {
-		query = `
-			SELECT notification_id, client_id, alert_id, severity, source, name, context, rule_ids, status, created_at, updated_at
-			FROM notifications
-			WHERE status = $1
-			ORDER BY created_at DESC
-		`
-		args = []interface{}{*status}
-	} else {
-		query = `
-			SELECT notification_id, client_id, alert_id, severity, source, name, context, rule_ids, status, created_at, updated_at
-			FROM notifications
-			ORDER BY created_at DESC
-		`
-		args = []interface{}{}
+// ListNotifications retrieves notifications with pagination, optionally filtered by client_id or status.
+// Default limit is 50, max limit is 200.
+func (db *DB) ListNotifications(ctx context.Context, clientID *string, status *string, limit, offset int) (*NotificationListResult, error) {
+	// Apply default and max limits
+	if limit <= 0 {
+		limit = 50
 	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Build WHERE clause
+	var whereClauses []string
+	var args []interface{}
+	argIndex := 1
+
+	if clientID != nil {
+		whereClauses = append(whereClauses, fmt.Sprintf("client_id = $%d", argIndex))
+		args = append(args, *clientID)
+		argIndex++
+	}
+	if status != nil {
+		whereClauses = append(whereClauses, fmt.Sprintf("status = $%d", argIndex))
+		args = append(args, *status)
+		argIndex++
+	}
+
+	whereClause := ""
+	if len(whereClauses) > 0 {
+		whereClause = "WHERE " + whereClauses[0]
+		for i := 1; i < len(whereClauses); i++ {
+			whereClause += " AND " + whereClauses[i]
+		}
+	}
+
+	// Get total count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM notifications %s", whereClause)
+	var total int64
+	if err := db.conn.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("failed to count notifications: %w", err)
+	}
+
+	// Get paginated results
+	query := fmt.Sprintf(`
+		SELECT notification_id, client_id, alert_id, severity, source, name, context, rule_ids, status, created_at, updated_at
+		FROM notifications
+		%s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, argIndex, argIndex+1)
+	args = append(args, limit, offset)
 
 	rows, err := db.conn.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -108,8 +133,17 @@ func (db *DB) ListNotifications(ctx context.Context, clientID *string, status *s
 		}
 
 		notif.Context = unmarshalNotificationContext(contextJSON)
-
 		notifications = append(notifications, &notif)
 	}
-	return notifications, rows.Err()
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &NotificationListResult{
+		Notifications: notifications,
+		Total:         total,
+		Limit:         limit,
+		Offset:        offset,
+	}, nil
 }

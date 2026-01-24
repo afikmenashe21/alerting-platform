@@ -888,13 +888,18 @@ func TestHandlers_ListNotifications(t *testing.T) {
 	}
 	h := NewHandlers(db, prod, nil)
 
-	t.Run("list all", func(t *testing.T) {
+	t.Run("list all with pagination", func(t *testing.T) {
+		// Expect COUNT query first
+		mock.ExpectQuery("SELECT COUNT").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		// Expect SELECT with LIMIT and OFFSET
 		rows := sqlmock.NewRows([]string{"notification_id", "client_id", "alert_id", "severity", "source", "name", "context", "rule_ids", "status", "created_at", "updated_at"}).
 			AddRow("notif-1", "client-1", "alert-1", "HIGH", "source-1", "alert-1", nil, pq.Array([]string{"rule-1"}), "RECEIVED", time.Now(), time.Now())
 		mock.ExpectQuery("SELECT notification_id, client_id, alert_id, severity, source, name, context, rule_ids, status, created_at, updated_at").
 			WillReturnRows(rows)
 
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications?limit=50&offset=0", nil)
 		w := httptest.NewRecorder()
 
 		h.ListNotifications(w, req)
