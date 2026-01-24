@@ -257,6 +257,20 @@ module "aggregator" {
   log_retention_days    = var.log_retention_days
 }
 
+# SSM Parameter for Resend API Key (SecureString for security)
+resource "aws_ssm_parameter" "resend_api_key" {
+  count       = var.resend_api_key != "" ? 1 : 0
+  name        = "/${var.project_name}/${var.environment}/resend-api-key"
+  description = "Resend API key for email delivery"
+  type        = "SecureString"
+  value       = var.resend_api_key
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-resend-api-key"
+    Environment = var.environment
+  }
+}
+
 module "sender" {
   source = "./modules/ecs-service"
 
@@ -286,9 +300,13 @@ module "sender" {
     # Email provider configuration (Strategy Pattern)
     EMAIL_PROVIDER            = var.email_provider    # "resend" (default), "ses", or empty for auto-detect
     EMAIL_FROM                = var.email_from        # Sender address
-    RESEND_API_KEY            = var.resend_api_key    # Resend API key (primary provider)
     AWS_REGION                = var.aws_region        # For SES fallback
   }
+
+  # Secrets from SSM Parameter Store (best practice for API keys)
+  secrets = var.resend_api_key != "" ? {
+    RESEND_API_KEY = aws_ssm_parameter.resend_api_key[0].arn
+  } : {}
 
   # Keep SES IAM permissions as fallback provider
   task_role_policy_json = jsonencode({

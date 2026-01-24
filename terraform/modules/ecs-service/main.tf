@@ -37,6 +37,27 @@ resource "aws_iam_role_policy_attachment" "task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Allow task execution role to read SSM parameters (for secrets)
+resource "aws_iam_role_policy" "task_execution_ssm" {
+  count = length(var.secrets) > 0 ? 1 : 0
+  name  = "${var.project_name}-${var.environment}-${var.service_name}-ssm-read"
+  role  = aws_iam_role.task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameters",
+          "ssm:GetParameter"
+        ]
+        Resource = values(var.secrets)
+      }
+    ]
+  })
+}
+
 # IAM Role for ECS Task (application permissions)
 resource "aws_iam_role" "task_role" {
   name = "${var.project_name}-${var.environment}-${var.service_name}-task"
@@ -76,6 +97,14 @@ locals {
       value = value
     }
   ]
+
+  # Convert secrets map to list format for ECS (SSM Parameter Store references)
+  secrets_list = [
+    for key, value in var.secrets : {
+      name      = key
+      valueFrom = value
+    }
+  ]
 }
 
 # ECS Task Definition
@@ -105,6 +134,7 @@ resource "aws_ecs_task_definition" "service" {
       ] : []
 
       environment = local.environment_list
+      secrets     = length(local.secrets_list) > 0 ? local.secrets_list : null
 
       logConfiguration = {
         logDriver = "awslogs"

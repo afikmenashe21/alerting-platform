@@ -120,3 +120,9 @@ variable "task_role_policy_json" {
   type        = string
   default     = ""
 }
+
+variable "secrets" {
+  description = "Secrets to inject from SSM Parameter Store (map of ENV_VAR_NAME => SSM parameter ARN)"
+  type        = map(string)
+  default     = {}
+}
