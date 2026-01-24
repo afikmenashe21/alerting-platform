@@ -15,7 +15,7 @@ func TestNewHandlers(t *testing.T) {
 	prod := &producer.Producer{} // Note: This is a nil pointer, but we're just testing the constructor
 
 	// Test constructor (metricsReader and metricsCollector can be nil)
-	h := NewHandlers(db, prod, nil, nil)
+	h := NewHandlers(db, prod, nil)
 	if h == nil {
 		t.Fatal("NewHandlers() returned nil")
 	}

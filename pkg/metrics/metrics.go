@@ -316,5 +316,6 @@ var ServiceNames = []string{
 	"sender",
 	"rule-service",
 	"rule-updater",
+	"metrics-service",
 }
 

@@ -1,4 +1,4 @@
-// Package main provides the CLI entry point for the rule-service.
+// Package main provides the CLI entry point for the metrics-service.
 // It handles command-line flag parsing, service initialization, and HTTP server setup.
 package main
 
@@ -12,11 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"rule-service/internal/config"
-	"rule-service/internal/database"
-	"rule-service/internal/handlers"
-	"rule-service/internal/producer"
-	"rule-service/internal/router"
+	"metrics-service/internal/config"
+	"metrics-service/internal/database"
+	"metrics-service/internal/handlers"
+	"metrics-service/internal/router"
 
 	"github.com/afikmenashe/alerting-platform/pkg/metrics"
 	"github.com/afikmenashe/alerting-platform/pkg/shared"
@@ -25,9 +24,7 @@ import (
 func main() {
 	// Parse command-line flags with environment variable fallbacks
 	cfg := &config.Config{}
-	flag.StringVar(&cfg.HTTPPort, "http-port", shared.GetEnvOrDefault("HTTP_PORT", "8081"), "HTTP server port")
-	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", shared.GetEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
-	flag.StringVar(&cfg.RuleChangedTopic, "rule-changed-topic", shared.GetEnvOrDefault("RULE_CHANGED_TOPIC", "rule.changed"), "Kafka topic for rule changed events")
+	flag.StringVar(&cfg.HTTPPort, "http-port", shared.GetEnvOrDefault("HTTP_PORT", "8083"), "HTTP server port")
 	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", shared.GetEnvOrDefault("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable"), "PostgreSQL connection string")
 	flag.StringVar(&cfg.RedisAddr, "redis-addr", shared.GetEnvOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address")
 	flag.Parse()
@@ -37,10 +34,8 @@ func main() {
 		Level: slog.LevelInfo,
 	})))
 
-	slog.Info("Starting rule-service",
+	slog.Info("Starting metrics-service",
 		"http_port", cfg.HTTPPort,
-		"kafka_brokers", cfg.KafkaBrokers,
-		"rule_changed_topic", cfg.RuleChangedTopic,
 		"postgres_dsn", shared.MaskDSN(cfg.PostgresDSN),
 		"redis_addr", cfg.RedisAddr,
 	)
@@ -84,24 +79,16 @@ func main() {
 	defer redisClient.Close()
 	slog.Info("Successfully connected to Redis")
 
+	// Initialize metrics reader (for reading other services' metrics)
+	metricsReader := metrics.NewReader(redisClient)
+
 	// Initialize metrics collector (for this service's own metrics)
-	metricsCollector := metrics.NewCollector("rule-service", redisClient)
+	metricsCollector := metrics.NewCollector("metrics-service", redisClient)
 	metricsCollector.Start(ctx)
 	defer metricsCollector.Stop()
 
-	// Initialize Kafka producer
-	slog.Info("Connecting to Kafka producer", "topic", cfg.RuleChangedTopic)
-	kafkaProducer, err := producer.NewProducer(cfg.KafkaBrokers, cfg.RuleChangedTopic)
-	if err != nil {
-		slog.Error("Failed to create Kafka producer", "error", err)
-		slog.Info("Tip: Start Kafka with 'docker compose up -d kafka'")
-		os.Exit(1)
-	}
-	defer kafkaProducer.Close()
-	slog.Info("Successfully connected to Kafka producer")
-
 	// Initialize HTTP handlers
-	h := handlers.NewHandlers(db, kafkaProducer, metricsCollector)
+	h := handlers.NewHandlers(db, metricsReader, metricsCollector)
 
 	// Create HTTP server with router
 	server := router.NewServer(cfg.HTTPPort, h)
@@ -130,6 +117,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	slog.Info("Rule-service stopped")
+	slog.Info("Metrics-service stopped")
 }
-

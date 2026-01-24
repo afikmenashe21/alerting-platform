@@ -1,4 +1,4 @@
-// Package database provides database operations for clients, rules, and endpoints.
+// Package database provides database operations for the metrics-service.
 package database
 
 import (
@@ -10,18 +10,18 @@ import (
 // SystemMetrics holds aggregated metrics from the database.
 type SystemMetrics struct {
 	// Notification metrics
-	TotalNotifications int64            `json:"total_notifications"`
+	TotalNotifications    int64            `json:"total_notifications"`
 	NotificationsByStatus map[string]int64 `json:"notifications_by_status"`
-	NotificationsLast24h int64           `json:"notifications_last_24h"`
-	NotificationsLastHour int64          `json:"notifications_last_hour"`
+	NotificationsLast24h  int64            `json:"notifications_last_24h"`
+	NotificationsLastHour int64            `json:"notifications_last_hour"`
 
 	// Rule metrics
-	TotalRules       int64 `json:"total_rules"`
-	EnabledRules     int64 `json:"enabled_rules"`
-	DisabledRules    int64 `json:"disabled_rules"`
+	TotalRules    int64 `json:"total_rules"`
+	EnabledRules  int64 `json:"enabled_rules"`
+	DisabledRules int64 `json:"disabled_rules"`
 
 	// Client metrics
-	TotalClients     int64 `json:"total_clients"`
+	TotalClients int64 `json:"total_clients"`
 
 	// Endpoint metrics
 	TotalEndpoints   int64            `json:"total_endpoints"`
@@ -52,8 +52,8 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 
 	// Get notification counts by status
 	statusQuery := `
-		SELECT status, COUNT(*) as count 
-		FROM notifications 
+		SELECT status, COUNT(*) as count
+		FROM notifications
 		GROUP BY status
 	`
 	rows, err := db.conn.QueryContext(ctx, statusQuery)
@@ -74,7 +74,7 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 
 	// Get notifications in last 24 hours
 	last24hQuery := `
-		SELECT COUNT(*) FROM notifications 
+		SELECT COUNT(*) FROM notifications
 		WHERE created_at >= NOW() - INTERVAL '24 hours'
 	`
 	if err := db.conn.QueryRowContext(ctx, last24hQuery).Scan(&metrics.NotificationsLast24h); err != nil {
@@ -83,7 +83,7 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 
 	// Get notifications in last hour
 	lastHourQuery := `
-		SELECT COUNT(*) FROM notifications 
+		SELECT COUNT(*) FROM notifications
 		WHERE created_at >= NOW() - INTERVAL '1 hour'
 	`
 	if err := db.conn.QueryRowContext(ctx, lastHourQuery).Scan(&metrics.NotificationsLastHour); err != nil {
@@ -92,10 +92,10 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 
 	// Get hourly notification counts for last 24 hours
 	hourlyQuery := `
-		SELECT 
+		SELECT
 			date_trunc('hour', created_at) as hour,
 			COUNT(*) as count
-		FROM notifications 
+		FROM notifications
 		WHERE created_at >= NOW() - INTERVAL '24 hours'
 		GROUP BY date_trunc('hour', created_at)
 		ORDER BY hour ASC
@@ -120,7 +120,7 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 
 	// Get rule counts
 	rulesQuery := `
-		SELECT 
+		SELECT
 			COUNT(*) as total,
 			COUNT(*) FILTER (WHERE enabled = true) as enabled,
 			COUNT(*) FILTER (WHERE enabled = false) as disabled
@@ -142,11 +142,11 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 
 	// Get endpoint counts by type
 	endpointsQuery := `
-		SELECT 
-			type, 
+		SELECT
+			type,
 			COUNT(*) as count,
 			COUNT(*) FILTER (WHERE enabled = true) as enabled_count
-		FROM endpoints 
+		FROM endpoints
 		GROUP BY type
 	`
 	endpointRows, err := db.conn.QueryContext(ctx, endpointsQuery)

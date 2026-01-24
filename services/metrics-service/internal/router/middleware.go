@@ -1,4 +1,4 @@
-// Package router provides HTTP routing configuration for the rule-service API.
+// Package router provides HTTP routing configuration for the metrics-service API.
 package router
 
 import (
@@ -44,7 +44,7 @@ func metricsMiddleware(collector *metrics.Collector) func(http.Handler) http.Han
 				return
 			}
 
-			// Skip health endpoint
+			// Skip health endpoint to avoid noise
 			if r.URL.Path == "/health" {
 				next.ServeHTTP(w, r)
 				return

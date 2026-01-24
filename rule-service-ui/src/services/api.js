@@ -1,9 +1,14 @@
 // API base URLs - configurable for production deployment
 // In production: set VITE_API_GATEWAY_URL=https://xxx.execute-api.region.amazonaws.com
 // In development: uses Vite proxy (see vite.config.js)
-const API_BASE_URL = import.meta.env.VITE_API_GATEWAY_URL 
+const API_BASE_URL = import.meta.env.VITE_API_GATEWAY_URL
   ? `${import.meta.env.VITE_API_GATEWAY_URL}/api/v1`
   : '/api/v1';
+
+// Metrics API base URL - separate service on port 8083
+const METRICS_API_BASE_URL = import.meta.env.VITE_METRICS_API_URL
+  ? `${import.meta.env.VITE_METRICS_API_URL}/api/v1`
+  : '/metrics-api/api/v1';
 
 async function handleResponse(response) {
   console.log('Response received:', {
@@ -234,7 +239,7 @@ export const notificationsAPI = {
 
 export const metricsAPI = {
   async get() {
-    const url = `${API_BASE_URL}/metrics`;
+    const url = `${METRICS_API_BASE_URL}/metrics`;
     console.log('GET', url);
     const response = await fetch(url);
     console.log('Response status:', response.status);
@@ -248,7 +253,7 @@ export const metricsAPI = {
 
 export const serviceMetricsAPI = {
   async getAll() {
-    const url = `${API_BASE_URL}/services/metrics`;
+    const url = `${METRICS_API_BASE_URL}/services/metrics`;
     console.log('GET', url);
     const response = await fetch(url);
     console.log('Response status:', response.status);
@@ -256,7 +261,7 @@ export const serviceMetricsAPI = {
   },
 
   async getService(serviceName) {
-    const url = `${API_BASE_URL}/services/metrics?service=${serviceName}`;
+    const url = `${METRICS_API_BASE_URL}/services/metrics?service=${serviceName}`;
     console.log('GET', url);
     const response = await fetch(url);
     console.log('Response status:', response.status);

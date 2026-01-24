@@ -47,7 +47,8 @@ module "ecr" {
     "evaluator",
     "aggregator",
     "sender",
-    "alert-producer"
+    "alert-producer",
+    "metrics-service"
   ]
 }
 
@@ -322,6 +323,40 @@ module "sender" {
       }
     ]
   })
+
+  load_balancer_enabled = false
+  log_retention_days    = var.log_retention_days
+}
+
+module "metrics_service" {
+  source = "./modules/ecs-service"
+
+  project_name          = var.project_name
+  environment           = var.environment
+  service_name          = "metrics-service"
+  ecs_cluster_id        = module.ecs_cluster.cluster_id
+  ecs_cluster_name      = module.ecs_cluster.cluster_name
+  vpc_id                = module.vpc.vpc_id
+  private_subnet_ids    = module.vpc.private_subnet_ids
+  ecs_security_group_id = module.ecs_cluster.ecs_security_group_id
+
+  container_image  = "${module.ecr.repository_urls["metrics-service"]}:${var.image_tag}"
+  container_port   = 8083 # metrics-service listens on 8083
+  container_cpu    = var.container_cpu
+  container_memory = var.container_memory
+
+  desired_count = 1
+  max_count     = 1
+
+  # Host network mode for direct public access
+  use_host_network         = true
+  enable_service_discovery = false
+
+  environment_variables = {
+    HTTP_PORT    = "8083"
+    POSTGRES_DSN = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
+    REDIS_ADDR   = module.redis.endpoint
+  }
 
   load_balancer_enabled = false
   log_retention_days    = var.log_retention_days

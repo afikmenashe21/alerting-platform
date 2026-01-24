@@ -6,16 +6,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"rule-service/internal/database"
-	"rule-service/internal/handlers"
-	"rule-service/internal/producer"
+	"metrics-service/internal/database"
+	"metrics-service/internal/handlers"
 )
 
 // TestNewRouter tests the NewRouter constructor.
 func TestNewRouter(t *testing.T) {
 	db := &database.DB{}
-	prod := &producer.Producer{}
-	h := handlers.NewHandlers(db, prod, nil)
+	h := handlers.NewHandlers(db, nil, nil)
 
 	router := NewRouter(h)
 	if router == nil {
@@ -32,8 +30,7 @@ func TestNewRouter(t *testing.T) {
 // TestRouter_Handler tests that the router returns a handler with CORS middleware.
 func TestRouter_Handler(t *testing.T) {
 	db := &database.DB{}
-	prod := &producer.Producer{}
-	h := handlers.NewHandlers(db, prod, nil)
+	h := handlers.NewHandlers(db, nil, nil)
 
 	router := NewRouter(h)
 	handler := router.Handler()
@@ -42,7 +39,7 @@ func TestRouter_Handler(t *testing.T) {
 	}
 
 	// Test that CORS middleware is applied
-	req := httptest.NewRequest(http.MethodOptions, "/api/v1/clients", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/metrics", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -51,7 +48,6 @@ func TestRouter_Handler(t *testing.T) {
 		t.Errorf("CORS OPTIONS request status = %v, want %v", w.Code, http.StatusOK)
 	}
 
-	// Check CORS headers
 	if w.Header().Get("Access-Control-Allow-Origin") != "*" {
 		t.Error("CORS header Access-Control-Allow-Origin not set")
 	}
@@ -63,8 +59,7 @@ func TestRouter_Handler(t *testing.T) {
 // TestRouter_HealthCheck tests the health check endpoint.
 func TestRouter_HealthCheck(t *testing.T) {
 	db := &database.DB{}
-	prod := &producer.Producer{}
-	h := handlers.NewHandlers(db, prod, nil)
+	h := handlers.NewHandlers(db, nil, nil)
 
 	router := NewRouter(h)
 	handler := router.Handler()
@@ -85,44 +80,24 @@ func TestRouter_HealthCheck(t *testing.T) {
 // TestNewServer tests the NewServer constructor.
 func TestNewServer(t *testing.T) {
 	db := &database.DB{}
-	prod := &producer.Producer{}
-	h := handlers.NewHandlers(db, prod, nil)
+	h := handlers.NewHandlers(db, nil, nil)
 
-	server := NewServer("8081", h)
+	server := NewServer("8083", h)
 	if server == nil {
 		t.Fatal("NewServer() returned nil")
 	}
-	if server.Addr != ":8081" {
-		t.Errorf("NewServer() Addr = %v, want :8081", server.Addr)
+	if server.Addr != ":8083" {
+		t.Errorf("NewServer() Addr = %v, want :8083", server.Addr)
 	}
 	if server.Handler == nil {
 		t.Error("NewServer() Handler is nil")
 	}
 }
 
-// TestRouter_Routes tests that routes are properly configured.
-// This test verifies routes are registered by checking they don't return 404.
-// Note: Some routes may panic or return errors due to nil database/producer, 
-// but we're only checking that routes exist (not 404).
-func TestRouter_Routes(t *testing.T) {
-	// Create handlers with nil database/producer - routes will error but not 404
-	db, _ := database.NewDB("postgres://invalid")
-	if db != nil {
-		defer db.Close()
-	}
-	prod, _ := producer.NewProducer("dummy:9092", "dummy")
-	if prod != nil {
-		defer prod.Close()
-	}
-	
-	// If we can't create db/prod, use nil - test will still verify routes exist
-	var h *handlers.Handlers
-	if db != nil && prod != nil {
-		h = handlers.NewHandlers(db, prod, nil)
-	} else {
-		// Use nil - routes will panic but we catch it
-		h = handlers.NewHandlers(nil, nil, nil)
-	}
+// TestRouter_MethodNotAllowed tests that non-GET methods return 405.
+func TestRouter_MethodNotAllowed(t *testing.T) {
+	db := &database.DB{}
+	h := handlers.NewHandlers(db, nil, nil)
 
 	router := NewRouter(h)
 	handler := router.Handler()
@@ -132,19 +107,11 @@ func TestRouter_Routes(t *testing.T) {
 		method string
 		path   string
 	}{
-		{"clients POST", http.MethodPost, "/api/v1/clients"},
-		{"clients GET", http.MethodGet, "/api/v1/clients?client_id=test"},
-		{"rules POST", http.MethodPost, "/api/v1/rules"},
-		{"rules GET", http.MethodGet, "/api/v1/rules?rule_id=test"},
-		{"rules UPDATE", http.MethodPut, "/api/v1/rules/update?rule_id=test"},
-		{"rules TOGGLE", http.MethodPost, "/api/v1/rules/toggle?rule_id=test"},
-		{"rules DELETE", http.MethodDelete, "/api/v1/rules/delete?rule_id=test"},
-		{"endpoints POST", http.MethodPost, "/api/v1/endpoints"},
-		{"endpoints GET", http.MethodGet, "/api/v1/endpoints?endpoint_id=test"},
-		{"endpoints UPDATE", http.MethodPut, "/api/v1/endpoints/update?endpoint_id=test"},
-		{"endpoints TOGGLE", http.MethodPost, "/api/v1/endpoints/toggle?endpoint_id=test"},
-		{"endpoints DELETE", http.MethodDelete, "/api/v1/endpoints/delete?endpoint_id=test"},
-		{"notifications GET", http.MethodGet, "/api/v1/notifications?notification_id=test"},
+		{"metrics POST", http.MethodPost, "/api/v1/metrics"},
+		{"metrics PUT", http.MethodPut, "/api/v1/metrics"},
+		{"metrics DELETE", http.MethodDelete, "/api/v1/metrics"},
+		{"services/metrics POST", http.MethodPost, "/api/v1/services/metrics"},
+		{"services/metrics PUT", http.MethodPut, "/api/v1/services/metrics"},
 	}
 
 	for _, tt := range tests {
@@ -152,22 +119,10 @@ func TestRouter_Routes(t *testing.T) {
 			req := httptest.NewRequest(tt.method, tt.path, nil)
 			w := httptest.NewRecorder()
 
-			// Catch panics - if route exists but panics due to nil, that's OK
-			// We just want to verify the route is registered (not 404)
-			panicked := false
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						panicked = true
-					}
-				}()
-				handler.ServeHTTP(w, req)
-			}()
+			handler.ServeHTTP(w, req)
 
-			// Routes should not return 404 (they exist)
-			// Panics or other errors are OK - we're just checking route registration
-			if !panicked && w.Code == http.StatusNotFound {
-				t.Errorf("Route %s %s returned 404, route may not be registered", tt.method, tt.path)
+			if w.Code != http.StatusMethodNotAllowed {
+				t.Errorf("Route %s %s status = %v, want %v", tt.method, tt.path, w.Code, http.StatusMethodNotAllowed)
 			}
 		})
 	}
@@ -176,8 +131,7 @@ func TestRouter_Routes(t *testing.T) {
 // TestCorsMiddleware tests CORS middleware functionality.
 func TestCorsMiddleware(t *testing.T) {
 	db := &database.DB{}
-	prod := &producer.Producer{}
-	h := handlers.NewHandlers(db, prod, nil)
+	h := handlers.NewHandlers(db, nil, nil)
 
 	router := NewRouter(h)
 	handler := router.Handler()
@@ -189,8 +143,6 @@ func TestCorsMiddleware(t *testing.T) {
 	}{
 		{"GET request", http.MethodGet, "*"},
 		{"POST request", http.MethodPost, "*"},
-		{"PUT request", http.MethodPut, "*"},
-		{"DELETE request", http.MethodDelete, "*"},
 		{"OPTIONS request", http.MethodOptions, "*"},
 	}
 

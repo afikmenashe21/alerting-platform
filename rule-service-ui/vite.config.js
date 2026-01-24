@@ -19,6 +19,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/alert-producer-api/, ''),
       },
+      '/metrics-api': {
+        target: 'http://localhost:8083',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/metrics-api/, ''),
+      },
     },
   },
 })

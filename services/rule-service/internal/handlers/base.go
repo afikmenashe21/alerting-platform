@@ -16,16 +16,14 @@ const (
 type Handlers struct {
 	db               *database.DB
 	producer         *producer.Producer
-	metricsReader    *metrics.Reader
 	metricsCollector *metrics.Collector
 }
 
 // NewHandlers creates a new handlers instance.
-func NewHandlers(db *database.DB, producer *producer.Producer, metricsReader *metrics.Reader, metricsCollector *metrics.Collector) *Handlers {
+func NewHandlers(db *database.DB, producer *producer.Producer, metricsCollector *metrics.Collector) *Handlers {
 	return &Handlers{
 		db:               db,
 		producer:         producer,
-		metricsReader:    metricsReader,
 		metricsCollector: metricsCollector,
 	}
 }
