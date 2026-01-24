@@ -69,7 +69,9 @@ export default function Notifications() {
 
   const loadClients = async () => {
     try {
-      const data = await clientsAPI.list(200, 0);
+      // Load only 100 clients for dropdown - sufficient for most use cases
+      // and reduces database load from COUNT(*) queries
+      const data = await clientsAPI.list(100, 0);
       setClients(data?.clients || []);
     } catch (err) {
       console.error('Failed to load clients:', err);

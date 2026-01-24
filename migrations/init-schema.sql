@@ -60,9 +60,13 @@ CREATE TABLE notifications (
 -- Indexes
 CREATE INDEX idx_rules_enabled ON rules(enabled) WHERE enabled = TRUE;
 CREATE INDEX idx_rules_client ON rules(client_id);
+CREATE INDEX idx_rules_created_at ON rules(created_at);
 CREATE INDEX idx_endpoints_rule ON endpoints(rule_id);
+CREATE INDEX idx_endpoints_created_at ON endpoints(created_at);
 CREATE INDEX idx_notifications_client_status ON notifications(client_id, status);
+CREATE INDEX idx_notifications_status ON notifications(status);
 CREATE INDEX idx_notifications_created_at ON notifications(created_at);
+CREATE INDEX idx_clients_created_at ON clients(created_at);
 
 -- Verify tables were created
 SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;

@@ -42,6 +42,7 @@ type HourlyCount struct {
 }
 
 // GetSystemMetrics aggregates metrics from all tables.
+// Note: Requires idx_notifications_status and idx_notifications_created_at indexes for good performance.
 func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 	metrics := &SystemMetrics{
 		NotificationsByStatus: make(map[string]int64),
@@ -50,7 +51,7 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		CollectedAt:           time.Now().UTC(),
 	}
 
-	// Get notification counts by status
+	// Get notification counts by status (uses idx_notifications_status)
 	statusQuery := `
 		SELECT status, COUNT(*) as count
 		FROM notifications
@@ -72,7 +73,7 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		metrics.TotalNotifications += count
 	}
 
-	// Get notifications in last 24 hours
+	// Get notifications in last 24 hours (uses idx_notifications_created_at)
 	last24hQuery := `
 		SELECT COUNT(*) FROM notifications
 		WHERE created_at >= NOW() - INTERVAL '24 hours'
@@ -81,7 +82,7 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		return nil, fmt.Errorf("failed to query last 24h notifications: %w", err)
 	}
 
-	// Get notifications in last hour
+	// Get notifications in last hour (uses idx_notifications_created_at)
 	lastHourQuery := `
 		SELECT COUNT(*) FROM notifications
 		WHERE created_at >= NOW() - INTERVAL '1 hour'
@@ -90,7 +91,7 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		return nil, fmt.Errorf("failed to query last hour notifications: %w", err)
 	}
 
-	// Get hourly notification counts for last 24 hours
+	// Get hourly notification counts for last 24 hours (uses idx_notifications_created_at)
 	hourlyQuery := `
 		SELECT
 			date_trunc('hour', created_at) as hour,

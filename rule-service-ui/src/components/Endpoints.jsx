@@ -32,7 +32,9 @@ export default function Endpoints() {
 
   const loadRules = async () => {
     try {
-      const data = await rulesAPI.list(null, 200, 0);
+      // Load only 100 rules for dropdown - sufficient for most use cases
+      // and reduces database load from COUNT(*) queries
+      const data = await rulesAPI.list(null, 100, 0);
       setRules(data?.rules || []);
     } catch (err) {
       console.error('Failed to load rules:', err);
