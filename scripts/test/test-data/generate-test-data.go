@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -14,6 +14,14 @@ import (
 
 const (
 	defaultDSN = "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable"
+
+	// Target: 90% of evaluator memory capacity (~500k rules max → 450k target)
+	numClients      = 1500
+	rulesPerClient  = 300 // 94% of 320 max per client (4 severities × 8 sources × 10 names)
+	endpointsPerRule = 2
+
+	// Batch insert size for performance on remote RDS
+	batchSize = 1000
 )
 
 var (
@@ -23,8 +31,18 @@ var (
 	endpointTypes = []string{"email", "webhook", "slack"}
 )
 
+// ruleCombination represents a unique (severity, source, name) tuple
+type ruleCombination struct {
+	severity string
+	source   string
+	name     string
+}
+
 func main() {
 	dsn := defaultDSN
+	if envDSN := os.Getenv("POSTGRES_DSN"); envDSN != "" {
+		dsn = envDSN
+	}
 	if len(os.Args) > 1 {
 		dsn = os.Args[1]
 	}
@@ -36,149 +54,224 @@ func main() {
 	}
 	defer db.Close()
 
+	// Increase connection pool for batch operations
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+
 	ctx := context.Background()
 	if err := db.PingContext(ctx); err != nil {
 		log.Fatalf("Failed to ping database: %v", err)
 	}
+
+	// Pre-generate all 320 possible rule combinations
+	allCombinations := generateAllCombinations()
+	log.Printf("Possible rule combinations per client: %d", len(allCombinations))
+	log.Printf("Using %d combinations per client (%.0f%% fill)", rulesPerClient, float64(rulesPerClient)/float64(len(allCombinations))*100)
+
+	log.Printf("")
+	log.Printf("=== Target Data ===")
+	log.Printf("Clients:   %d", numClients)
+	log.Printf("Rules:     %d (%d clients × %d rules)", numClients*rulesPerClient, numClients, rulesPerClient)
+	log.Printf("Endpoints: %d (%d rules × %d endpoints)", numClients*rulesPerClient*endpointsPerRule, numClients*rulesPerClient, endpointsPerRule)
+	log.Printf("")
+
+	start := time.Now()
 
 	log.Printf("Cleaning database...")
 	if err := cleanDatabase(ctx, db); err != nil {
 		log.Fatalf("Failed to clean database: %v", err)
 	}
 
-	log.Printf("Generating 100 clients with rules and endpoints...")
-	rand.Seed(time.Now().UnixNano())
-
-	clientsCreated := 0
-	rulesCreated := 0
-	endpointsCreated := 0
-
-	for i := 1; i <= 100; i++ {
-		clientID := fmt.Sprintf("client-%03d", i)
-		clientName := fmt.Sprintf("Client %d", i)
-
-		// Create client
-		if err := createClient(ctx, db, clientID, clientName); err != nil {
-			log.Printf("Warning: Failed to create client %s: %v", clientID, err)
-			continue
-		}
-		clientsCreated++
-
-		// Generate 1-5 rules per client (random distribution)
-		numRules := rand.Intn(5) + 1
-		for j := 0; j < numRules; j++ {
-			severity := severities[rand.Intn(len(severities))]
-			source := sources[rand.Intn(len(sources))]
-			name := names[rand.Intn(len(names))]
-
-			ruleID, err := createRule(ctx, db, clientID, severity, source, name)
-			if err != nil {
-				log.Printf("Warning: Failed to create rule for client %s: %v", clientID, err)
-				continue
-			}
-			rulesCreated++
-
-			// Generate 1-3 endpoints per rule (random distribution)
-			numEndpoints := rand.Intn(3) + 1
-			endpointTypesUsed := make(map[string]bool)
-
-			for k := 0; k < numEndpoints; k++ {
-				// Ensure we don't create duplicate endpoint types for the same rule
-				endpointType := endpointTypes[rand.Intn(len(endpointTypes))]
-				maxAttempts := 10
-				for endpointTypesUsed[endpointType] && maxAttempts > 0 {
-					endpointType = endpointTypes[rand.Intn(len(endpointTypes))]
-					maxAttempts--
-				}
-				endpointTypesUsed[endpointType] = true
-
-				var value string
-				switch endpointType {
-				case "email":
-					value = fmt.Sprintf("alert-%03d-%d@example.com", i, k+1)
-				case "webhook":
-					value = fmt.Sprintf("https://webhook.example.com/client-%03d/rule-%s", i, ruleID[:8])
-				case "slack":
-					value = fmt.Sprintf("#alerts-client-%03d", i)
-				}
-
-				if err := createEndpoint(ctx, db, ruleID, endpointType, value); err != nil {
-					log.Printf("Warning: Failed to create endpoint for rule %s: %v", ruleID, err)
-					continue
-				}
-				endpointsCreated++
-			}
-		}
-
-		if i%10 == 0 {
-			log.Printf("Progress: %d clients, %d rules, %d endpoints created...", clientsCreated, rulesCreated, endpointsCreated)
-		}
+	log.Printf("Creating %d clients...", numClients)
+	if err := createClients(ctx, db); err != nil {
+		log.Fatalf("Failed to create clients: %v", err)
 	}
 
-	log.Printf("\n=== Generation Complete ===")
-	log.Printf("Clients created: %d", clientsCreated)
-	log.Printf("Rules created: %d", rulesCreated)
-	log.Printf("Endpoints created: %d", endpointsCreated)
-	log.Printf("Average rules per client: %.2f", float64(rulesCreated)/float64(clientsCreated))
-	log.Printf("Average endpoints per rule: %.2f", float64(endpointsCreated)/float64(rulesCreated))
+	log.Printf("Creating %d rules (batch size: %d)...", numClients*rulesPerClient, batchSize)
+	ruleIDs, err := createRules(ctx, db, allCombinations)
+	if err != nil {
+		log.Fatalf("Failed to create rules: %v", err)
+	}
+
+	log.Printf("Creating %d endpoints (batch size: %d)...", len(ruleIDs)*endpointsPerRule, batchSize)
+	endpointsCreated, err := createEndpoints(ctx, db, ruleIDs)
+	if err != nil {
+		log.Fatalf("Failed to create endpoints: %v", err)
+	}
+
+	elapsed := time.Since(start)
+	log.Printf("")
+	log.Printf("=== Generation Complete ===")
+	log.Printf("Clients:   %d", numClients)
+	log.Printf("Rules:     %d", len(ruleIDs))
+	log.Printf("Endpoints: %d", endpointsCreated)
+	log.Printf("Duration:  %s", elapsed.Round(time.Second))
+	log.Printf("")
+	log.Printf("Evaluator memory estimate: ~%.0f MB (of 100 MB budget)", float64(len(ruleIDs))*200/1024/1024)
+	log.Printf("Redis snapshot estimate:   ~%.0f MB (of 460 MB budget)", float64(len(ruleIDs))*150/1024/1024)
+}
+
+func generateAllCombinations() []ruleCombination {
+	combinations := make([]ruleCombination, 0, len(severities)*len(sources)*len(names))
+	for _, sev := range severities {
+		for _, src := range sources {
+			for _, name := range names {
+				combinations = append(combinations, ruleCombination{sev, src, name})
+			}
+		}
+	}
+	return combinations
 }
 
 func cleanDatabase(ctx context.Context, db *sql.DB) error {
-	// Delete in order: endpoints -> rules -> clients -> notifications
-	// (respecting foreign key constraints)
-
 	queries := []string{
 		"DELETE FROM endpoints",
 		"DELETE FROM rules",
 		"DELETE FROM notifications",
 		"DELETE FROM clients",
 	}
-
 	for _, query := range queries {
 		if _, err := db.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("failed to execute %s: %w", query, err)
 		}
 	}
-
 	return nil
 }
 
-func createClient(ctx context.Context, db *sql.DB, clientID, name string) error {
-	query := `
-		INSERT INTO clients (client_id, name, created_at, updated_at)
-		VALUES ($1, $2, NOW(), NOW())
-		ON CONFLICT (client_id) DO NOTHING
-	`
-	_, err := db.ExecContext(ctx, query, clientID, name)
-	return err
-}
+func createClients(ctx context.Context, db *sql.DB) error {
+	for batchStart := 1; batchStart <= numClients; batchStart += batchSize {
+		batchEnd := batchStart + batchSize - 1
+		if batchEnd > numClients {
+			batchEnd = numClients
+		}
 
-func createRule(ctx context.Context, db *sql.DB, clientID, severity, source, name string) (string, error) {
-	query := `
-		INSERT INTO rules (client_id, severity, source, name, enabled, version, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, TRUE, 1, NOW(), NOW())
-		ON CONFLICT (client_id, severity, source, name) DO NOTHING
-		RETURNING rule_id
-	`
-	var ruleID string
-	err := db.QueryRowContext(ctx, query, clientID, severity, source, name).Scan(&ruleID)
-	if err == sql.ErrNoRows {
-		// Rule already exists, fetch it
-		query = `
-			SELECT rule_id FROM rules
-			WHERE client_id = $1 AND severity = $2 AND source = $3 AND name = $4
-		`
-		err = db.QueryRowContext(ctx, query, clientID, severity, source, name).Scan(&ruleID)
+		values := make([]string, 0, batchEnd-batchStart+1)
+		args := make([]interface{}, 0, (batchEnd-batchStart+1)*2)
+		argIdx := 1
+
+		for i := batchStart; i <= batchEnd; i++ {
+			clientID := fmt.Sprintf("client-%05d", i)
+			clientName := fmt.Sprintf("Client %d", i)
+			values = append(values, fmt.Sprintf("($%d, $%d, NOW(), NOW())", argIdx, argIdx+1))
+			args = append(args, clientID, clientName)
+			argIdx += 2
+		}
+
+		query := fmt.Sprintf(
+			"INSERT INTO clients (client_id, name, created_at, updated_at) VALUES %s ON CONFLICT (client_id) DO NOTHING",
+			strings.Join(values, ", "),
+		)
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			return fmt.Errorf("batch insert clients %d-%d: %w", batchStart, batchEnd, err)
+		}
+
+		if batchEnd%5000 == 0 || batchEnd == numClients {
+			log.Printf("  Clients: %d/%d", batchEnd, numClients)
+		}
 	}
-	return ruleID, err
+	return nil
 }
 
-func createEndpoint(ctx context.Context, db *sql.DB, ruleID, endpointType, value string) error {
-	query := `
-		INSERT INTO endpoints (rule_id, type, value, enabled, created_at, updated_at)
-		VALUES ($1, $2, $3, TRUE, NOW(), NOW())
-		ON CONFLICT (rule_id, type, value) DO NOTHING
-	`
-	_, err := db.ExecContext(ctx, query, ruleID, endpointType, value)
-	return err
+func createRules(ctx context.Context, db *sql.DB, combinations []ruleCombination) ([]string, error) {
+	allRuleIDs := make([]string, 0, numClients*rulesPerClient)
+	totalCreated := 0
+
+	for clientIdx := 1; clientIdx <= numClients; clientIdx++ {
+		clientID := fmt.Sprintf("client-%05d", clientIdx)
+
+		// Pick the first rulesPerClient combinations for this client (deterministic, no conflicts)
+		clientCombinations := combinations[:rulesPerClient]
+
+		// Batch insert rules for this client
+		for batchStart := 0; batchStart < len(clientCombinations); batchStart += batchSize {
+			batchEnd := batchStart + batchSize
+			if batchEnd > len(clientCombinations) {
+				batchEnd = len(clientCombinations)
+			}
+
+			batch := clientCombinations[batchStart:batchEnd]
+			values := make([]string, 0, len(batch))
+			args := make([]interface{}, 0, len(batch)*4)
+			argIdx := 1
+
+			for _, combo := range batch {
+				values = append(values, fmt.Sprintf("($%d, $%d, $%d, $%d, TRUE, 1, NOW(), NOW())", argIdx, argIdx+1, argIdx+2, argIdx+3))
+				args = append(args, clientID, combo.severity, combo.source, combo.name)
+				argIdx += 4
+			}
+
+			query := fmt.Sprintf(
+				"INSERT INTO rules (client_id, severity, source, name, enabled, version, created_at, updated_at) VALUES %s ON CONFLICT (client_id, severity, source, name) DO NOTHING RETURNING rule_id",
+				strings.Join(values, ", "),
+			)
+
+			rows, err := db.QueryContext(ctx, query, args...)
+			if err != nil {
+				return nil, fmt.Errorf("batch insert rules for %s: %w", clientID, err)
+			}
+
+			for rows.Next() {
+				var ruleID string
+				if err := rows.Scan(&ruleID); err != nil {
+					rows.Close()
+					return nil, fmt.Errorf("scan rule_id: %w", err)
+				}
+				allRuleIDs = append(allRuleIDs, ruleID)
+				totalCreated++
+			}
+			rows.Close()
+		}
+
+		if clientIdx%100 == 0 || clientIdx == numClients {
+			log.Printf("  Rules: %d/%d (client %d/%d)", totalCreated, numClients*rulesPerClient, clientIdx, numClients)
+		}
+	}
+
+	return allRuleIDs, nil
+}
+
+func createEndpoints(ctx context.Context, db *sql.DB, ruleIDs []string) (int, error) {
+	totalCreated := 0
+
+	for batchStart := 0; batchStart < len(ruleIDs); batchStart += batchSize / endpointsPerRule {
+		batchEnd := batchStart + batchSize/endpointsPerRule
+		if batchEnd > len(ruleIDs) {
+			batchEnd = len(ruleIDs)
+		}
+
+		values := make([]string, 0, (batchEnd-batchStart)*endpointsPerRule)
+		args := make([]interface{}, 0, (batchEnd-batchStart)*endpointsPerRule*3)
+		argIdx := 1
+
+		for i := batchStart; i < batchEnd; i++ {
+			ruleID := ruleIDs[i]
+
+			// Create 2 endpoints per rule: email + webhook
+			emailValue := fmt.Sprintf("alert-%d@example.com", i+1)
+			values = append(values, fmt.Sprintf("($%d, 'email', $%d, TRUE, NOW(), NOW())", argIdx, argIdx+1))
+			args = append(args, ruleID, emailValue)
+			argIdx += 2
+
+			webhookValue := fmt.Sprintf("https://webhook.example.com/rule/%s", ruleID[:8])
+			values = append(values, fmt.Sprintf("($%d, 'webhook', $%d, TRUE, NOW(), NOW())", argIdx, argIdx+1))
+			args = append(args, ruleID, webhookValue)
+			argIdx += 2
+		}
+
+		query := fmt.Sprintf(
+			"INSERT INTO endpoints (rule_id, type, value, enabled, created_at, updated_at) VALUES %s ON CONFLICT (rule_id, type, value) DO NOTHING",
+			strings.Join(values, ", "),
+		)
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			return 0, fmt.Errorf("batch insert endpoints at offset %d: %w", batchStart, err)
+		}
+
+		totalCreated += (batchEnd - batchStart) * endpointsPerRule
+
+		if totalCreated%(batchSize*10) == 0 || batchEnd == len(ruleIDs) {
+			log.Printf("  Endpoints: %d/%d", totalCreated, len(ruleIDs)*endpointsPerRule)
+		}
+	}
+
+	return totalCreated, nil
 }

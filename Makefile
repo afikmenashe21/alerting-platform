@@ -32,7 +32,7 @@ help:
 	@echo "  proto-install-deps     - Install protoc and Go plugins (macOS/Linux)"
 	@echo ""
 	@echo "Test Data:"
-	@echo "  generate-test-data - Clean database and generate 100 clients with rules and endpoints"
+	@echo "  generate-test-data - Clean database and generate 1,500 clients with 450k rules and 900k endpoints"
 
 # Infrastructure management
 setup-infra:
