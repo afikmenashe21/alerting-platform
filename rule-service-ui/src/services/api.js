@@ -225,14 +225,22 @@ export const notificationsAPI = {
     return handleResponse(response);
   },
 
-  async list(clientId = null, status = null) {
-    let url = `${API_BASE_URL}/notifications`;
+  /**
+   * List notifications with pagination
+   * @param {string|null} clientId - Filter by client ID
+   * @param {string|null} status - Filter by status (RECEIVED, SENT, FAILED)
+   * @param {number} limit - Number of items per page (default 50, max 200)
+   * @param {number} offset - Offset for pagination (default 0)
+   * @returns {Promise<{notifications: Array, total: number, limit: number, offset: number}>}
+   */
+  async list(clientId = null, status = null, limit = 50, offset = 0) {
     const params = new URLSearchParams();
     if (clientId) params.append('client_id', clientId);
     if (status) params.append('status', status);
-    if (params.toString()) {
-      url += '?' + params.toString();
-    }
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+    
+    const url = `${API_BASE_URL}/notifications?${params.toString()}`;
     console.log('GET', url);
     const response = await fetch(url);
     console.log('Response status:', response.status);
