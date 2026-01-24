@@ -41,11 +41,10 @@ type HourlyCount struct {
 }
 
 // queryTimeout is the maximum time for each database query
-const queryTimeout = 10 * time.Second
+const queryTimeout = 5 * time.Second
 
 // GetSystemMetrics aggregates metrics from all tables.
-// Uses a per-query timeout to prevent long-running queries from blocking.
-// Note: Requires idx_notifications_status and idx_notifications_created_at indexes for good performance.
+// Uses approximate counts from pg_stat for large tables to ensure fast response.
 func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 	metrics := &SystemMetrics{
 		NotificationsByStatus: make(map[string]int64),
@@ -59,27 +58,53 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		return context.WithTimeout(ctx, queryTimeout)
 	}
 
-	// Get notification counts by status (uses idx_notifications_status)
-	// This query benefits from the status index
+	// Use approximate row counts from pg_stat for large tables
+	// This is instant regardless of table size
+	approxCtx, approxCancel := queryCtx()
+	defer approxCancel()
+	approxQuery := `
+		SELECT relname, n_live_tup 
+		FROM pg_stat_user_tables 
+		WHERE relname IN ('notifications', 'rules', 'endpoints', 'clients')
+	`
+	approxRows, err := db.conn.QueryContext(approxCtx, approxQuery)
+	if err == nil {
+		defer approxRows.Close()
+		for approxRows.Next() {
+			var tableName string
+			var count int64
+			if err := approxRows.Scan(&tableName, &count); err == nil {
+				switch tableName {
+				case "notifications":
+					metrics.TotalNotifications = count
+				case "rules":
+					metrics.TotalRules = count
+				case "endpoints":
+					metrics.TotalEndpoints = count
+				case "clients":
+					metrics.TotalClients = count
+				}
+			}
+		}
+	}
+
+	// Get notification status breakdown - use a LIMIT to make it fast
+	// This gives recent distribution which is usually representative
 	statusCtx, statusCancel := queryCtx()
 	defer statusCancel()
 	statusQuery := `
 		SELECT status, COUNT(*) as count
-		FROM notifications
+		FROM (SELECT status FROM notifications ORDER BY created_at DESC LIMIT 10000) sub
 		GROUP BY status
 	`
-	rows, err := db.conn.QueryContext(statusCtx, statusQuery)
-	if err != nil {
-		// Don't fail completely - return partial data
-		metrics.NotificationsByStatus["error"] = -1
-	} else {
-		defer rows.Close()
-		for rows.Next() {
+	statusRows, err := db.conn.QueryContext(statusCtx, statusQuery)
+	if err == nil {
+		defer statusRows.Close()
+		for statusRows.Next() {
 			var status string
 			var count int64
-			if err := rows.Scan(&status, &count); err == nil {
+			if err := statusRows.Scan(&status, &count); err == nil {
 				metrics.NotificationsByStatus[status] = count
-				metrics.TotalNotifications += count
 			}
 		}
 	}
@@ -129,29 +154,21 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		}
 	}
 
-	// Get rule counts
+	// Get rule enabled/disabled counts
 	rulesCtx, rulesCancel := queryCtx()
 	defer rulesCancel()
 	rulesQuery := `
 		SELECT
-			COUNT(*) as total,
 			COUNT(*) FILTER (WHERE enabled = true) as enabled,
 			COUNT(*) FILTER (WHERE enabled = false) as disabled
 		FROM rules
 	`
 	_ = db.conn.QueryRowContext(rulesCtx, rulesQuery).Scan(
-		&metrics.TotalRules,
 		&metrics.EnabledRules,
 		&metrics.DisabledRules,
 	)
 
-	// Get client count
-	clientsCtx, clientsCancel := queryCtx()
-	defer clientsCancel()
-	clientsQuery := `SELECT COUNT(*) FROM clients`
-	_ = db.conn.QueryRowContext(clientsCtx, clientsQuery).Scan(&metrics.TotalClients)
-
-	// Get endpoint counts by type
+	// Get endpoint counts by type (small result set, fast query)
 	endpointsCtx, endpointsCancel := queryCtx()
 	defer endpointsCancel()
 	endpointsQuery := `
@@ -165,14 +182,20 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 	endpointRows, err := db.conn.QueryContext(endpointsCtx, endpointsQuery)
 	if err == nil {
 		defer endpointRows.Close()
+		var totalEndpoints, enabledEndpoints int64
 		for endpointRows.Next() {
 			var endpointType string
 			var count, enabledCount int64
 			if err := endpointRows.Scan(&endpointType, &count, &enabledCount); err == nil {
 				metrics.EndpointsByType[endpointType] = count
-				metrics.TotalEndpoints += count
-				metrics.EnabledEndpoints += enabledCount
+				totalEndpoints += count
+				enabledEndpoints += enabledCount
 			}
+		}
+		// Use exact counts from this query if we got them
+		if totalEndpoints > 0 {
+			metrics.TotalEndpoints = totalEndpoints
+			metrics.EnabledEndpoints = enabledEndpoints
 		}
 	}
 
