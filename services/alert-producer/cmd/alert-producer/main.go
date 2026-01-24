@@ -19,6 +19,7 @@ import (
 	"alert-producer/internal/producer"
 
 	"github.com/afikmenashe/alerting-platform/pkg/metrics"
+	"github.com/afikmenashe/alerting-platform/pkg/shared"
 )
 
 func main() {
@@ -32,8 +33,8 @@ func main() {
 	var mockMode bool
 	var testMode bool
 	var singleTestMode bool
-	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", metrics.GetEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
-	flag.StringVar(&cfg.Topic, "topic", metrics.GetEnvOrDefault("ALERTS_NEW_TOPIC", "alerts.new"), "Kafka topic name")
+	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", shared.GetEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
+	flag.StringVar(&cfg.Topic, "topic", shared.GetEnvOrDefault("ALERTS_NEW_TOPIC", "alerts.new"), "Kafka topic name")
 	flag.Float64Var(&cfg.RPS, "rps", 10.0, "Alerts per second")
 	flag.DurationVar(&cfg.Duration, "duration", 60*time.Second, "Duration to run (e.g., 60s, 5m)")
 	flag.IntVar(&cfg.BurstSize, "burst", 0, "Burst mode: send N alerts immediately, then stop (0 = continuous)")
@@ -44,7 +45,7 @@ func main() {
 	flag.BoolVar(&mockMode, "mock", false, "Use mock producer (no Kafka required, logs alerts instead)")
 	flag.BoolVar(&testMode, "test", false, "Test mode: generate test alert (LOW/test-source/test-name) matching afik-test rule")
 	flag.BoolVar(&singleTestMode, "single-test", false, "Single test mode: send only one test alert (LOW/test-source/test-name) and exit")
-	flag.StringVar(&cfg.RedisAddr, "redis-addr", metrics.GetEnvOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address for metrics")
+	flag.StringVar(&cfg.RedisAddr, "redis-addr", shared.GetEnvOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address for metrics")
 	flag.Parse()
 
 	slog.Info("Starting alert-producer",
@@ -77,7 +78,7 @@ func main() {
 	var metricsCollector *metrics.Collector
 	if cfg.RedisAddr != "" {
 		slog.Info("Connecting to Redis for metrics", "addr", cfg.RedisAddr)
-		redisClient, err := metrics.ConnectRedis(ctx, cfg.RedisAddr)
+		redisClient, err := shared.ConnectRedis(ctx, cfg.RedisAddr)
 		if err != nil {
 			slog.Warn("Failed to connect to Redis, metrics will be disabled", "error", err)
 		} else {

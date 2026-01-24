@@ -7,6 +7,7 @@ require (
 	github.com/afikmenashe/alerting-platform/pkg/kafka v0.0.0
 	github.com/afikmenashe/alerting-platform/pkg/metrics v0.0.0
 	github.com/afikmenashe/alerting-platform/pkg/proto v0.0.0
+	github.com/afikmenashe/alerting-platform/pkg/shared v0.0.0
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/segmentio/kafka-go v0.4.47
@@ -25,3 +26,5 @@ replace github.com/afikmenashe/alerting-platform/pkg/proto => ../../pkg/proto
 replace github.com/afikmenashe/alerting-platform/pkg/kafka => ../../pkg/kafka
 
 replace github.com/afikmenashe/alerting-platform/pkg/metrics => ../../pkg/metrics
+
+replace github.com/afikmenashe/alerting-platform/pkg/shared => ../../pkg/shared

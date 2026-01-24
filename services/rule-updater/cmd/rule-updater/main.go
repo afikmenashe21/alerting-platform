@@ -15,16 +15,17 @@ import (
 	"rule-updater/internal/snapshot"
 
 	"github.com/afikmenashe/alerting-platform/pkg/metrics"
+	"github.com/afikmenashe/alerting-platform/pkg/shared"
 )
 
 func main() {
 	// Parse command-line flags with environment variable fallbacks
 	cfg := &config.Config{}
-	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", metrics.GetEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
-	flag.StringVar(&cfg.RuleChangedTopic, "rule-changed-topic", metrics.GetEnvOrDefault("RULE_CHANGED_TOPIC", "rule.changed"), "Kafka topic for rule change events")
-	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", metrics.GetEnvOrDefault("CONSUMER_GROUP_ID", "rule-updater-group"), "Kafka consumer group ID")
-	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", metrics.GetEnvOrDefault("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable"), "PostgreSQL connection string")
-	flag.StringVar(&cfg.RedisAddr, "redis-addr", metrics.GetEnvOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address")
+	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", shared.GetEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
+	flag.StringVar(&cfg.RuleChangedTopic, "rule-changed-topic", shared.GetEnvOrDefault("RULE_CHANGED_TOPIC", "rule.changed"), "Kafka topic for rule change events")
+	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", shared.GetEnvOrDefault("CONSUMER_GROUP_ID", "rule-updater-group"), "Kafka consumer group ID")
+	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", shared.GetEnvOrDefault("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable"), "PostgreSQL connection string")
+	flag.StringVar(&cfg.RedisAddr, "redis-addr", shared.GetEnvOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address")
 	flag.Parse()
 
 	// Set up structured logging
@@ -36,7 +37,7 @@ func main() {
 		"kafka_brokers", cfg.KafkaBrokers,
 		"rule_changed_topic", cfg.RuleChangedTopic,
 		"consumer_group_id", cfg.ConsumerGroupID,
-		"postgres_dsn", metrics.MaskDSN(cfg.PostgresDSN),
+		"postgres_dsn", shared.MaskDSN(cfg.PostgresDSN),
 		"redis_addr", cfg.RedisAddr,
 	)
 
@@ -70,7 +71,7 @@ func main() {
 
 	// Initialize Redis client
 	slog.Info("Connecting to Redis", "addr", cfg.RedisAddr)
-	redisClient, err := metrics.ConnectRedis(ctx, cfg.RedisAddr)
+	redisClient, err := shared.ConnectRedis(ctx, cfg.RedisAddr)
 	if err != nil {
 		slog.Error("Failed to connect to Redis", "error", err)
 		slog.Info("Tip: Start Redis with 'docker compose up -d redis' or ensure Redis is running")

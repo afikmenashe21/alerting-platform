@@ -59,9 +59,6 @@ func (p *Processor) ProcessAlerts(ctx context.Context) error {
 			slog.Info("Alert processing loop stopped")
 			return nil
 		default:
-			// Start timing for full processing latency
-			startTime := time.Now()
-
 			// Read alert from Kafka
 			alert, msg, err := p.consumer.ReadMessage(ctx)
 			if err != nil {
@@ -76,6 +73,9 @@ func (p *Processor) ProcessAlerts(ctx context.Context) error {
 			if p.metrics != nil {
 				p.metrics.RecordReceived()
 			}
+
+			// Start timing AFTER receiving the message (don't include Kafka wait time)
+			startTime := time.Now()
 
 			// Match alert against rules
 			matches := p.matcher.Match(alert.Severity, alert.Source, alert.Name)

@@ -80,6 +80,14 @@ function Services() {
     return num.toString();
   };
 
+  const formatLatency = (ns) => {
+    if (!ns) return '0 ms';
+    if (ns >= 1000000000) return (ns / 1000000000).toFixed(2) + ' s';
+    if (ns >= 1000000) return (ns / 1000000).toFixed(2) + ' ms';
+    if (ns >= 1000) return (ns / 1000).toFixed(1) + ' µs';
+    return ns.toFixed(0) + ' ns';
+  };
+
   const activeMetrics = activeService ? metrics?.services?.[activeService] : null;
 
   return (
@@ -158,7 +166,7 @@ function Services() {
                 <div className="metric-box">
                   <div className="metric-label">Avg Latency</div>
                   <div className="metric-value">
-                    {activeMetrics?.avg_processing_latency_ns?.toFixed(0) || '0'} ns
+                    {formatLatency(activeMetrics?.avg_processing_latency_ns)}
                   </div>
                 </div>
               </div>

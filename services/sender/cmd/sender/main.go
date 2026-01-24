@@ -14,16 +14,17 @@ import (
 	"sender/internal/sender"
 
 	"github.com/afikmenashe/alerting-platform/pkg/metrics"
+	"github.com/afikmenashe/alerting-platform/pkg/shared"
 )
 
 func main() {
 	// Parse command-line flags with environment variable fallbacks
 	cfg := &config.Config{}
-	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", metrics.GetEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
-	flag.StringVar(&cfg.NotificationsReadyTopic, "notifications-ready-topic", metrics.GetEnvOrDefault("NOTIFICATIONS_READY_TOPIC", "notifications.ready"), "Kafka topic for ready notifications")
-	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", metrics.GetEnvOrDefault("CONSUMER_GROUP_ID", "sender-group"), "Kafka consumer group ID")
-	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", metrics.GetEnvOrDefault("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable"), "PostgreSQL connection string")
-	flag.StringVar(&cfg.RedisAddr, "redis-addr", metrics.GetEnvOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address")
+	flag.StringVar(&cfg.KafkaBrokers, "kafka-brokers", shared.GetEnvOrDefault("KAFKA_BROKERS", "localhost:9092"), "Kafka broker addresses (comma-separated)")
+	flag.StringVar(&cfg.NotificationsReadyTopic, "notifications-ready-topic", shared.GetEnvOrDefault("NOTIFICATIONS_READY_TOPIC", "notifications.ready"), "Kafka topic for ready notifications")
+	flag.StringVar(&cfg.ConsumerGroupID, "consumer-group-id", shared.GetEnvOrDefault("CONSUMER_GROUP_ID", "sender-group"), "Kafka consumer group ID")
+	flag.StringVar(&cfg.PostgresDSN, "postgres-dsn", shared.GetEnvOrDefault("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable"), "PostgreSQL connection string")
+	flag.StringVar(&cfg.RedisAddr, "redis-addr", shared.GetEnvOrDefault("REDIS_ADDR", "localhost:6379"), "Redis server address")
 	flag.Parse()
 
 	// Set up structured logging
@@ -40,7 +41,7 @@ func main() {
 		"kafka_brokers", cfg.KafkaBrokers,
 		"notifications_ready_topic", cfg.NotificationsReadyTopic,
 		"consumer_group_id", cfg.ConsumerGroupID,
-		"postgres_dsn", metrics.MaskDSN(cfg.PostgresDSN),
+		"postgres_dsn", shared.MaskDSN(cfg.PostgresDSN),
 		"redis_addr", cfg.RedisAddr,
 	)
 
@@ -74,7 +75,7 @@ func main() {
 
 	// Initialize Redis client for metrics
 	slog.Info("Connecting to Redis", "addr", cfg.RedisAddr)
-	redisClient, err := metrics.ConnectRedis(ctx, cfg.RedisAddr)
+	redisClient, err := shared.ConnectRedis(ctx, cfg.RedisAddr)
 	if err != nil {
 		slog.Error("Failed to connect to Redis", "error", err)
 		slog.Info("Tip: Start Redis with 'docker compose up -d redis'")
