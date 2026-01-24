@@ -203,6 +203,42 @@ Deployed free-tier infrastructure for rule-service-ui:
 5) ✅ Performance scaling and load testing (2026-01-24)
 6) ✅ Alert Generator UI: Restored client configuration for single alert test (2026-01-24)
 
+## GitHub Pages UI Fixes (2026-01-24)
+
+### Issue: Mixed Content (HTTPS to HTTP blocked)
+- GitHub Pages serves over HTTPS
+- Backend services on EC2 served over HTTP
+- Browsers blocked HTTP requests from HTTPS pages
+
+**Solution**: API Gateway HTTPS proxy already deployed at `https://7ezsleikw0.execute-api.us-east-1.amazonaws.com`
+- Updated `.github/workflows/deploy-ui.yml` with default API Gateway URL
+- Redeploy UI via GitHub Actions to use HTTPS proxy
+
+### Issue: Notifications tab slow (1.5M+ rows)
+- `COUNT(*)` on notifications table took 30+ seconds
+- `ORDER BY created_at DESC` required index scan
+
+**Solution**: Use approximate counts for unfiltered queries
+- `pg_stat_user_tables.n_live_tup` for instant approximate counts
+- Only use exact counts when filters applied (reduces scan scope)
+- File: `rule-service/internal/database/notifications.go`
+
+### Issue: Dashboard/Metrics timeout
+- Multiple slow COUNT queries on 1.5M+ rows
+- Query timeouts causing no response
+
+**Solution**: Sampling and aggressive timeouts
+- Use last 1000 rows sampling for status distribution
+- Reduce query timeout to 2 seconds
+- Extrapolate sample to total for estimated breakdowns
+- File: `metrics-service/internal/database/metrics.go`
+
+### Deployment Notes
+- metrics-service memory reduced to 96MB (was 150MB)
+- Had to scale aggregator to 1 (from 2) due to memory constraints
+- sender scaled to 1 (was incorrectly running 2 instances)
+- Total memory on t3.small: ~1938MB, running at capacity
+
 ## Alert Generator UI Enhancement (2026-01-24)
 
 Restored client-configurable fields for Single Alert Test in `AlertGenerator.jsx`:

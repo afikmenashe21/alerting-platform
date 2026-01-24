@@ -137,6 +137,26 @@
 
 ## Bug Fixes
 
+### GitHub Pages UI unable to communicate with services (2026-01-24)
+- **Problem**: UI deployed on HTTPS (GitHub Pages) couldn't call HTTP backend (mixed content blocked)
+- **Fix**: Updated deploy-ui.yml to use HTTPS API Gateway URL as default
+- **API Gateway**: `https://7ezsleikw0.execute-api.us-east-1.amazonaws.com`
+
+### Notifications tab slow with 1.5M+ rows (2026-01-24)
+- **Problem**: `COUNT(*)` without filters caused full table scan (~30+ seconds)
+- **Fix**: Use `pg_stat_user_tables.n_live_tup` for approximate counts (instant)
+- **File**: `services/rule-service/internal/database/notifications.go`
+
+### Dashboard/Metrics endpoint timeout (2026-01-24)
+- **Problem**: Multiple slow COUNT queries on large table caused timeouts
+- **Fix**: Use sampling (last 1000 rows) for status distribution, reduce query timeout to 2s
+- **File**: `services/metrics-service/internal/database/metrics.go`
+
+### metrics-service not deployed (2026-01-24)
+- **Problem**: metrics-service missing from `build-and-push.sh` and `update-services.sh`
+- **Fix**: Added metrics-service to both deployment scripts
+- **Memory**: Reduced to 96MB to fit on t3.small with other services
+
 ### stop-all-services.sh not stopping alert-producer-api (2026-01-24)
 - **Problem**: `make stop-all` didn't stop the `alert-producer-api` service
 - **Root Cause**: SERVICES array in `stop-all-services.sh` had both `"alert-producer"` and `"alert-producer-api"`, but the `alert-producer` service builds and runs `bin/alert-producer-api` (not `bin/alert-producer`)
