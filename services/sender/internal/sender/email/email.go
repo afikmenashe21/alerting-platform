@@ -1,4 +1,5 @@
-// Package email provides email notification sending via AWS SES API.
+// Package email provides email notification sending with multiple provider support.
+// Uses the Strategy pattern to support SES, Resend, and other email providers.
 package email
 
 import (
@@ -8,40 +9,64 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/sesv2"
-	"github.com/aws/aws-sdk-go-v2/service/sesv2/types"
-
 	"sender/internal/database"
+	"sender/internal/sender/email/provider"
 	"sender/internal/sender/payload"
 )
 
-// Sender implements email notification sending via AWS SES API.
+// Sender implements email notification sending using configurable providers.
 type Sender struct {
-	client *sesv2.Client
-	from   string
-	region string
+	registry *provider.Registry
+	from     string
 }
 
-// NewSender creates a new SES email sender.
+// NewSender creates a new email sender with all providers registered.
+// The provider is selected based on EMAIL_PROVIDER env var (default: auto-detect)
+// Priority: resend > ses (based on configuration availability)
 func NewSender() *Sender {
-	region := getEnvOrDefault("AWS_REGION", "us-east-1")
-	from := getEnvOrDefault("SMTP_FROM", getEnvOrDefault("SES_FROM", "alerts@alerting-platform.local"))
+	from := getEnvOrDefault("EMAIL_FROM", getEnvOrDefault("SES_FROM", "alerts@alerting-platform.local"))
 
-	// Load AWS config (uses EC2 instance role credentials automatically)
-	cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
-	if err != nil {
-		slog.Error("Failed to load AWS config, SES sending will fail", "error", err)
-		return &Sender{from: from, region: region}
+	// Create provider registry
+	registry := provider.NewRegistry()
+
+	// Register all providers
+	registry.Register(provider.NewSESProvider())
+	registry.Register(provider.NewResendProvider())
+
+	// Set provider priority based on EMAIL_PROVIDER env var
+	primaryProvider := getEnvOrDefault("EMAIL_PROVIDER", "")
+
+	if primaryProvider != "" {
+		// Explicit provider selection
+		if err := registry.SetPrimary(primaryProvider); err != nil {
+			slog.Warn("Failed to set primary email provider", "provider", primaryProvider, "error", err)
+		}
+	} else {
+		// Auto-detect: prefer Resend if configured, otherwise SES
+		if p, ok := registry.Get("resend"); ok && p.IsConfigured() {
+			registry.SetPrimary("resend")
+		} else {
+			registry.SetPrimary("ses")
+		}
 	}
 
-	client := sesv2.NewFromConfig(cfg)
-	slog.Info("SES email sender initialized", "region", region, "from", from)
+	// Set fallback order
+	registry.SetFallback("resend", "ses")
+
+	// Log active provider
+	if p, err := registry.GetPrimary(); err == nil {
+		slog.Info("Email sender initialized",
+			"primary_provider", p.Name(),
+			"from", from,
+			"available_providers", registry.List(),
+		)
+	} else {
+		slog.Warn("No email provider configured", "error", err)
+	}
 
 	return &Sender{
-		client: client,
-		from:   from,
-		region: region,
+		registry: registry,
+		from:     from,
 	}
 }
 
@@ -57,7 +82,7 @@ func (s *Sender) Type() string {
 	return "email"
 }
 
-// Send sends an email notification via AWS SES API.
+// Send sends an email notification using the configured provider.
 func (s *Sender) Send(ctx context.Context, endpointValue string, notification *database.Notification) error {
 	if endpointValue == "" {
 		return fmt.Errorf("email recipient is required")
@@ -74,46 +99,29 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 		}
 	}
 
-	if s.client == nil {
-		return fmt.Errorf("SES client not initialized")
-	}
-
+	// Build email payload
 	emailPayload := payload.BuildEmailPayload(notification)
 
-	// Build SES SendEmail request
-	toAddresses := make([]string, len(recipients))
-	copy(toAddresses, recipients)
-
-	input := &sesv2.SendEmailInput{
-		FromEmailAddress: &s.from,
-		Destination: &types.Destination{
-			ToAddresses: toAddresses,
-		},
-		Content: &types.EmailContent{
-			Simple: &types.Message{
-				Subject: &types.Content{
-					Data: &emailPayload.Subject,
-				},
-				Body: &types.Body{
-					Text: &types.Content{
-						Data: &emailPayload.Body,
-					},
-				},
-			},
-		},
+	// Create provider request
+	req := &provider.EmailRequest{
+		From:    s.from,
+		To:      recipients,
+		Subject: emailPayload.Subject,
+		Body:    emailPayload.Body,
+		HTML:    emailPayload.HTML,
 	}
 
-	_, err := s.client.SendEmail(ctx, input)
-	if err != nil {
-		slog.Error("Failed to send email via SES",
+	// Send via registry (handles provider selection and fallback)
+	if err := s.registry.Send(ctx, req); err != nil {
+		slog.Error("Failed to send email",
 			"error", err,
 			"to", strings.Join(recipients, ", "),
 			"notification_id", notification.NotificationID,
 		)
-		return fmt.Errorf("SES send failed: %w", err)
+		return err
 	}
 
-	slog.Info("Successfully sent email via SES",
+	slog.Info("Successfully sent email",
 		"from", s.from,
 		"to", strings.Join(recipients, ", "),
 		"subject", emailPayload.Subject,
@@ -123,6 +131,14 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 	)
 
 	return nil
+}
+
+// GetActiveProvider returns the name of the currently active email provider.
+func (s *Sender) GetActiveProvider() string {
+	if p, err := s.registry.GetPrimary(); err == nil {
+		return p.Name()
+	}
+	return "none"
 }
 
 // parseRecipients splits a comma-separated list of email addresses.

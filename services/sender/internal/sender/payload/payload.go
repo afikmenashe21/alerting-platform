@@ -12,20 +12,23 @@ import (
 // EmailPayload represents email message content.
 type EmailPayload struct {
 	Subject string
-	Body    string
+	Body    string // Plain text body
+	HTML    string // HTML body
 }
 
-// BuildEmailPayload builds email subject and body from a notification.
+// BuildEmailPayload builds email subject, body, and HTML from a notification.
 func BuildEmailPayload(notification *database.Notification) EmailPayload {
 	subject := fmt.Sprintf("Alert: %s - %s", notification.Severity, notification.Name)
 	body := buildEmailBody(notification)
+	html := buildEmailHTML(notification)
 	return EmailPayload{
 		Subject: subject,
 		Body:    body,
+		HTML:    html,
 	}
 }
 
-// buildEmailBody builds the email body from the notification.
+// buildEmailBody builds the plain text email body from the notification.
 func buildEmailBody(notification *database.Notification) string {
 	var sb strings.Builder
 	sb.WriteString("Alert Notification\n")
@@ -46,6 +49,97 @@ func buildEmailBody(notification *database.Notification) string {
 	}
 
 	return sb.String()
+}
+
+// buildEmailHTML builds the HTML email body from the notification.
+func buildEmailHTML(notification *database.Notification) string {
+	severityColor := getSeverityColorHex(notification.Severity)
+
+	var sb strings.Builder
+	sb.WriteString(`<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+    .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .header { padding: 20px; color: white; }
+    .content { padding: 20px; }
+    .field { margin-bottom: 12px; }
+    .label { font-weight: 600; color: #666; font-size: 12px; text-transform: uppercase; }
+    .value { font-size: 14px; color: #333; margin-top: 4px; }
+    .context { background: #f9f9f9; padding: 15px; border-radius: 4px; margin-top: 15px; }
+    .footer { padding: 15px 20px; background: #f5f5f5; font-size: 12px; color: #999; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header" style="background: ` + severityColor + `;">
+      <h2 style="margin: 0;">Alert: ` + notification.Name + `</h2>
+      <p style="margin: 5px 0 0 0; opacity: 0.9;">Severity: ` + notification.Severity + `</p>
+    </div>
+    <div class="content">
+      <div class="field">
+        <div class="label">Source</div>
+        <div class="value">` + notification.Source + `</div>
+      </div>
+      <div class="field">
+        <div class="label">Alert ID</div>
+        <div class="value">` + notification.AlertID + `</div>
+      </div>
+      <div class="field">
+        <div class="label">Client ID</div>
+        <div class="value">` + notification.ClientID + `</div>
+      </div>
+      <div class="field">
+        <div class="label">Notification ID</div>
+        <div class="value">` + notification.NotificationID + `</div>
+      </div>
+      <div class="field">
+        <div class="label">Matched Rules</div>
+        <div class="value">` + strings.Join(notification.RuleIDs, ", ") + `</div>
+      </div>`)
+
+	if len(notification.Context) > 0 {
+		sb.WriteString(`
+      <div class="context">
+        <div class="label" style="margin-bottom: 10px;">Context</div>`)
+		for k, v := range notification.Context {
+			sb.WriteString(`
+        <div class="field">
+          <div class="label">` + k + `</div>
+          <div class="value">` + v + `</div>
+        </div>`)
+		}
+		sb.WriteString(`
+      </div>`)
+	}
+
+	sb.WriteString(`
+    </div>
+    <div class="footer">
+      Sent by Alerting Platform
+    </div>
+  </div>
+</body>
+</html>`)
+
+	return sb.String()
+}
+
+// getSeverityColorHex returns the hex color for a given severity.
+func getSeverityColorHex(severity string) string {
+	switch strings.ToUpper(severity) {
+	case "CRITICAL":
+		return "#dc2626" // red
+	case "HIGH":
+		return "#ea580c" // orange
+	case "MEDIUM":
+		return "#ca8a04" // yellow
+	case "LOW":
+		return "#16a34a" // green
+	default:
+		return "#6b7280" // gray
+	}
 }
 
 // SlackPayload represents a Slack webhook payload.

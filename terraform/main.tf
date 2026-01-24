@@ -280,12 +280,17 @@ module "sender" {
   environment_variables = {
     KAFKA_BROKERS             = module.kafka.kafka_endpoint
     POSTGRES_DSN              = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
+    REDIS_ADDR                = module.redis.endpoint
     NOTIFICATIONS_READY_TOPIC = "notifications.ready"
     CONSUMER_GROUP_ID         = "sender-group"
-    AWS_REGION                = var.aws_region
-    SES_FROM                  = var.smtp_from
+    # Email provider configuration (Strategy Pattern)
+    EMAIL_PROVIDER            = var.email_provider    # "resend" (default), "ses", or empty for auto-detect
+    EMAIL_FROM                = var.email_from        # Sender address
+    RESEND_API_KEY            = var.resend_api_key    # Resend API key (primary provider)
+    AWS_REGION                = var.aws_region        # For SES fallback
   }
 
+  # Keep SES IAM permissions as fallback provider
   task_role_policy_json = jsonencode({
     Version = "2012-10-17"
     Statement = [

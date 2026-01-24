@@ -199,6 +199,45 @@ Deployed free-tier infrastructure for rule-service-ui:
 1) ✅ UI deployed to GitHub Pages
 2) ✅ Backend accessible via Elastic IP
 3) ✅ Sender service migrated from SMTP to AWS SES API (2026-01-23)
+4) ✅ Multi-provider email architecture implemented (2026-01-24)
+
+## Multi-Provider Email System (2026-01-24)
+
+### Overview
+Implemented Strategy Pattern for email providers with automatic fallback support. This allows seamless switching between email providers and adds resilience.
+
+### Architecture
+```
+sender/internal/sender/email/
+├── email.go              # Main sender (uses provider registry)
+└── provider/
+    ├── provider.go       # Provider interface & registry
+    ├── ses.go            # AWS SES implementation (fallback)
+    └── resend.go         # Resend implementation (default)
+```
+
+### Provider Priority
+1. **Resend** (default): Fast delivery, 3000 emails/month free tier, instant production access
+2. **AWS SES** (fallback): High volume, requires production access approval
+
+### Configuration
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `EMAIL_PROVIDER` | Force provider (`resend`, `ses`) | Auto-detect |
+| `EMAIL_FROM` | Sender address | `onboarding@resend.dev` |
+| `RESEND_API_KEY` | Resend API key | (required) |
+| `AWS_REGION` | For SES fallback | `us-east-1` |
+
+### Key Features
+- **Auto-Detection**: Uses Resend if configured, falls back to SES
+- **Automatic Fallback**: If primary fails, tries other providers
+- **HTML Emails**: Beautiful styled templates with severity-based colors
+- **Extensible**: Add new providers by implementing `Provider` interface
+
+### Terraform Updates
+- Added: `email_provider`, `email_from`, `resend_api_key` variables
+- Updated sender module environment variables
+- Kept SES IAM permissions as fallback
 
 ## Code health
 - Completed comprehensive cleanup and modularization across all services:

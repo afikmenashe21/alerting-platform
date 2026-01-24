@@ -87,34 +87,54 @@ variable "db_allocated_storage" {
   default     = 20
 }
 
-# SMTP Configuration (for sender service)
-variable "smtp_host" {
-  description = "SMTP server hostname"
+# Email Configuration (for sender service)
+variable "email_from" {
+  description = "Email FROM address for notifications"
   type        = string
-  default     = "smtp.gmail.com"
+  default     = "onboarding@resend.dev"
+}
+
+variable "email_provider" {
+  description = "Email provider to use: 'resend' (default), 'ses', or empty for auto-detect"
+  type        = string
+  default     = "resend"
+}
+
+variable "resend_api_key" {
+  description = "Resend API key for email delivery (https://resend.com)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+# Legacy SMTP variables (deprecated - kept for backward compatibility)
+variable "smtp_host" {
+  description = "[DEPRECATED] SMTP server hostname"
+  type        = string
+  default     = ""
 }
 
 variable "smtp_port" {
-  description = "SMTP server port"
+  description = "[DEPRECATED] SMTP server port"
   type        = string
-  default     = "587"
+  default     = ""
 }
 
 variable "smtp_user" {
-  description = "SMTP authentication username"
+  description = "[DEPRECATED] SMTP authentication username"
   type        = string
   default     = ""
 }
 
 variable "smtp_password" {
-  description = "SMTP authentication password"
+  description = "[DEPRECATED] SMTP authentication password"
   type        = string
   sensitive   = true
   default     = ""
 }
 
 variable "smtp_from" {
-  description = "Email FROM address for notifications"
+  description = "[DEPRECATED] Use email_from instead"
   type        = string
   default     = ""
 }

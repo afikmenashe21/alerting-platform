@@ -109,10 +109,77 @@ internal/sender/
 - [x] SES email identity verified in sandbox mode
 - [x] Build requirement: `--platform linux/amd64` for ECS EC2
 
+## Multi-Provider Email Architecture (2026-01-24)
+
+### Strategy Pattern for Email Providers
+Implemented a flexible email provider system using the Strategy Pattern to support multiple email backends with automatic fallback.
+
+#### Architecture
+```
+internal/sender/email/
+├── email.go              # Main sender (uses provider registry)
+├── email_test.go         # Tests
+└── provider/
+    ├── provider.go       # Provider interface & registry
+    ├── ses.go            # AWS SES implementation
+    └── resend.go         # Resend implementation (default)
+```
+
+#### Supported Providers
+| Provider | Status | Notes |
+|----------|--------|-------|
+| **Resend** | Primary (default) | Fast delivery, 3000 emails/month free tier, no verification needed |
+| **AWS SES** | Fallback | Good for high volume, requires production access approval |
+
+#### Configuration (Environment Variables)
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `EMAIL_PROVIDER` | Force specific provider (`resend`, `ses`) | Auto-detect |
+| `EMAIL_FROM` | Sender email address | `onboarding@resend.dev` |
+| `RESEND_API_KEY` | Resend API key | (required for Resend) |
+| `AWS_REGION` | AWS region for SES | `us-east-1` |
+
+#### Provider Selection Logic
+1. If `EMAIL_PROVIDER` is explicitly set → use that provider
+2. Auto-detect mode:
+   - If `RESEND_API_KEY` is configured → use Resend
+   - Otherwise → use SES
+3. Fallback: If primary provider fails, automatically try other configured providers
+
+#### Key Features
+- **Strategy Pattern**: Easy to add new providers (Mailgun, SendGrid, etc.)
+- **Automatic Fallback**: If primary provider fails, tries fallback providers
+- **Provider Registry**: Centralized management of all email providers
+- **HTML Emails**: Beautiful styled HTML email templates with severity-based colors
+- **Extensible**: Implement `Provider` interface to add new backends
+
+#### Provider Interface
+```go
+type Provider interface {
+    Name() string
+    Send(ctx context.Context, req *EmailRequest) error
+    IsConfigured() bool
+}
+```
+
+#### Adding a New Provider
+1. Create `provider/newprovider.go` implementing `Provider` interface
+2. Register in `email.go`: `registry.Register(provider.NewMyProvider())`
+3. Add to fallback chain if desired
+
+### Terraform Updates
+- Added `email_provider`, `email_from`, `resend_api_key` variables
+- Updated sender module environment variables
+- Kept SES IAM permissions as fallback
+
+## Retry & DLQ Implementation (2026-01-23)
+- [x] Implemented retry with exponential backoff (3 attempts, 1s-30s)
+- [x] Added jitter to prevent thundering herd
+- [x] Simple DLQ pattern: mark notification as FAILED after all retries exhausted
+- [x] Skip FAILED notifications on reprocessing (idempotency)
+
 ## Future Enhancements
-- Retry logic with exponential backoff for failed sends
 - Rate limiting per client/endpoint
-- Dead letter queue for persistently failed sends
 - Metrics and observability (success/failure rates per endpoint type)
-- Request SES production access (currently in sandbox)
 - Support for Slack Block Kit for richer message formatting
+- Additional email providers (Mailgun, SendGrid, Postmark)

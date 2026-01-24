@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"sender/internal/database"
+	"sender/internal/sender/email/provider"
 )
 
 func TestNewSender(t *testing.T) {
@@ -17,8 +18,8 @@ func TestNewSender(t *testing.T) {
 	if sender.from == "" {
 		t.Error("NewSender() from should not be empty")
 	}
-	if sender.region == "" {
-		t.Error("NewSender() region should not be empty")
+	if sender.registry == nil {
+		t.Error("NewSender() registry should not be nil")
 	}
 }
 
@@ -45,7 +46,10 @@ func TestSender_Type(t *testing.T) {
 }
 
 func TestSender_Send_EmptyRecipient(t *testing.T) {
-	sender := &Sender{from: "test@example.com"}
+	sender := &Sender{
+		from:     "test@example.com",
+		registry: provider.NewRegistry(),
+	}
 	notification := &database.Notification{NotificationID: "notif-123"}
 	err := sender.Send(context.Background(), "", notification)
 	if err == nil || !strings.Contains(err.Error(), "email recipient is required") {
@@ -54,7 +58,10 @@ func TestSender_Send_EmptyRecipient(t *testing.T) {
 }
 
 func TestSender_Send_InvalidEmail(t *testing.T) {
-	sender := &Sender{from: "test@example.com"}
+	sender := &Sender{
+		from:     "test@example.com",
+		registry: provider.NewRegistry(),
+	}
 	notification := &database.Notification{NotificationID: "notif-123"}
 	err := sender.Send(context.Background(), "invalid-email", notification)
 	if err == nil || !strings.Contains(err.Error(), "invalid email address format") {
@@ -63,7 +70,10 @@ func TestSender_Send_InvalidEmail(t *testing.T) {
 }
 
 func TestSender_Send_NoValidRecipients(t *testing.T) {
-	sender := &Sender{from: "test@example.com"}
+	sender := &Sender{
+		from:     "test@example.com",
+		registry: provider.NewRegistry(),
+	}
 	notification := &database.Notification{NotificationID: "notif-123"}
 	err := sender.Send(context.Background(), ", ,", notification)
 	if err == nil || !strings.Contains(err.Error(), "no valid email recipients provided") {
@@ -71,12 +81,27 @@ func TestSender_Send_NoValidRecipients(t *testing.T) {
 	}
 }
 
-func TestSender_Send_NilClient(t *testing.T) {
-	sender := &Sender{from: "test@example.com", client: nil}
+func TestSender_Send_NoProvider(t *testing.T) {
+	// Empty registry - no providers configured
+	sender := &Sender{
+		from:     "test@example.com",
+		registry: provider.NewRegistry(),
+	}
 	notification := &database.Notification{NotificationID: "notif-123"}
 	err := sender.Send(context.Background(), "test@example.com", notification)
-	if err == nil || !strings.Contains(err.Error(), "SES client not initialized") {
-		t.Errorf("expected 'SES client not initialized' error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "no configured email provider") {
+		t.Errorf("expected 'no configured email provider' error, got %v", err)
+	}
+}
+
+func TestSender_GetActiveProvider(t *testing.T) {
+	sender := &Sender{
+		from:     "test@example.com",
+		registry: provider.NewRegistry(),
+	}
+	// No provider configured
+	if sender.GetActiveProvider() != "none" {
+		t.Errorf("GetActiveProvider() = %v, want 'none'", sender.GetActiveProvider())
 	}
 }
 
