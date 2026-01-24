@@ -43,6 +43,14 @@ kafka_replication_factor = 1  # Single broker setup
 enable_container_insights = false  # Set to true if you want detailed metrics (costs money)
 log_retention_days       = 7       # CloudWatch log retention (7 days to save costs)
 
+# Email Configuration (Strategy Pattern - multiple provider support)
+# Primary: Resend (fast, 3000 emails/month free)
+# Fallback: AWS SES (requires production access approval)
+email_provider = "resend"                    # "resend" (default), "ses", or "" for auto-detect
+email_from     = "alerts@your-domain.com"    # Must match verified domain in Resend
+resend_api_key = "re_YOUR_API_KEY_HERE"      # Get from https://resend.com/api-keys
+                                              # Stored securely in AWS SSM Parameter Store
+
 # Docker Image Configuration
 image_tag = "latest"  # Or use specific version/commit hash
 
