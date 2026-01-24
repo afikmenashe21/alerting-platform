@@ -201,6 +201,25 @@ Deployed free-tier infrastructure for rule-service-ui:
 3) ✅ Sender service migrated from SMTP to AWS SES API (2026-01-23)
 4) ✅ Multi-provider email architecture implemented (2026-01-24)
 5) ✅ Performance scaling and load testing (2026-01-24)
+6) ✅ Alert Generator UI: Restored client configuration for single alert test (2026-01-24)
+
+## Alert Generator UI Enhancement (2026-01-24)
+
+Restored client-configurable fields for Single Alert Test in `AlertGenerator.jsx`:
+- **Severity**: Dropdown (LOW, MEDIUM, HIGH, CRITICAL)
+- **Source**: Text input (e.g., api, db, cache)
+- **Name**: Text input (e.g., timeout, error, crash)
+
+This allows users to send targeted test alerts that match specific rules, instead of using hardcoded values.
+
+### Files Changed
+- `rule-service-ui/src/components/AlertGenerator.jsx` - Added `singleAlertConfig` state and form fields
+
+### Backend Correlation
+The alert-producer-api already supports these fields:
+- `types.go`: `GenerateRequest` has `Severity`, `Source`, `Name` fields
+- `executor.go`: `sendCustomAlerts()` uses these fields
+- `generator.go`: `GenerateCustomAlert()` creates alerts with custom properties
 
 ## Performance Scaling (2026-01-24)
 

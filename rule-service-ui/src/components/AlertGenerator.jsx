@@ -3,11 +3,6 @@ import { alertGeneratorAPI } from '../services/api';
 
 // Load test presets based on performance testing results
 const PRESETS = {
-  single: {
-    label: 'Single Alert',
-    description: 'Send 1 test alert',
-    config: { single_test: true, severity: 'LOW', source: 'test', name: 'single-test' }
-  },
   burst: {
     label: 'Max Burst (100K)',
     description: 'Send 100,000 alerts as fast as possible',
@@ -25,6 +20,13 @@ function AlertGenerator() {
   const [jobHistory, setJobHistory] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  
+  // Single alert configuration
+  const [singleAlertConfig, setSingleAlertConfig] = useState({
+    severity: 'LOW',
+    source: 'test-source',
+    name: 'test-name'
+  });
 
   // Load job history and restore active job on mount
   useEffect(() => {
@@ -103,6 +105,29 @@ function AlertGenerator() {
     }
   };
 
+  const sendSingleAlert = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const config = {
+        single_test: true,
+        severity: singleAlertConfig.severity,
+        source: singleAlertConfig.source,
+        name: singleAlertConfig.name
+      };
+      const response = await alertGeneratorAPI.generate(config);
+      const status = await alertGeneratorAPI.getStatus(response.job_id);
+      setActiveJob(status);
+      loadJobHistory();
+    } catch (err) {
+      setError(err.message?.includes('Failed to fetch') 
+        ? 'Cannot connect to alert-producer API' 
+        : err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const stopJob = async () => {
     if (!activeJob) return;
     try {
@@ -142,7 +167,7 @@ function AlertGenerator() {
 
   return (
     <div className="alert-generator">
-      <h2>Load Test Generator</h2>
+      <h2>Alert Generator</h2>
       
       {error && (
         <div style={{ 
@@ -156,10 +181,97 @@ function AlertGenerator() {
         </div>
       )}
 
-      {/* Preset Buttons */}
+      {/* Single Alert Configuration */}
+      <div style={{ 
+        marginBottom: '2rem', 
+        padding: '1.5rem', 
+        background: '#e7f3ff', 
+        borderRadius: '8px',
+        border: '1px solid #b3d9ff'
+      }}>
+        <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Single Alert Test</h3>
+        <p style={{ color: '#6c757d', marginBottom: '1rem', fontSize: '0.9rem' }}>
+          Send a single alert with custom properties to test your rules.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 'bold' }}>Severity:</label>
+            <select
+              value={singleAlertConfig.severity}
+              onChange={(e) => setSingleAlertConfig({ ...singleAlertConfig, severity: e.target.value })}
+              disabled={loading || activeJob}
+              style={{ 
+                width: '100%', 
+                padding: '0.5rem',
+                borderRadius: '4px',
+                border: '1px solid #ccc'
+              }}
+            >
+              <option value="LOW">LOW</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="HIGH">HIGH</option>
+              <option value="CRITICAL">CRITICAL</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 'bold' }}>Source:</label>
+            <input
+              type="text"
+              value={singleAlertConfig.source}
+              onChange={(e) => setSingleAlertConfig({ ...singleAlertConfig, source: e.target.value })}
+              disabled={loading || activeJob}
+              placeholder="e.g., api, db, cache"
+              style={{ 
+                width: '100%', 
+                padding: '0.5rem',
+                borderRadius: '4px',
+                border: '1px solid #ccc',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 'bold' }}>Name:</label>
+            <input
+              type="text"
+              value={singleAlertConfig.name}
+              onChange={(e) => setSingleAlertConfig({ ...singleAlertConfig, name: e.target.value })}
+              disabled={loading || activeJob}
+              placeholder="e.g., timeout, error, crash"
+              style={{ 
+                width: '100%', 
+                padding: '0.5rem',
+                borderRadius: '4px',
+                border: '1px solid #ccc',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+        </div>
+        <button
+          onClick={sendSingleAlert}
+          disabled={loading || activeJob}
+          style={{
+            padding: '0.75rem 1.5rem',
+            fontSize: '1rem',
+            cursor: loading || activeJob ? 'not-allowed' : 'pointer',
+            background: loading || activeJob ? '#e9ecef' : '#17a2b8',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            fontWeight: 'bold',
+            opacity: loading || activeJob ? 0.6 : 1
+          }}
+        >
+          Send Single Alert
+        </button>
+      </div>
+
+      {/* Load Test Presets */}
       <div style={{ marginBottom: '2rem' }}>
-        <p style={{ color: '#6c757d', marginBottom: '1rem' }}>
-          Select a load test mode. Results based on t3.small (~780 alerts/sec max).
+        <h3 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Load Test Presets</h3>
+        <p style={{ color: '#6c757d', marginBottom: '1rem', fontSize: '0.9rem' }}>
+          Results based on t3.small (~780 alerts/sec max).
         </p>
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           {Object.entries(PRESETS).map(([key, preset]) => (
@@ -172,7 +284,6 @@ function AlertGenerator() {
                 fontSize: '1rem',
                 cursor: loading || activeJob ? 'not-allowed' : 'pointer',
                 background: loading || activeJob ? '#e9ecef' : 
-                  key === 'single' ? '#17a2b8' : 
                   key === 'burst' ? '#ffc107' : '#dc3545',
                 color: key === 'burst' ? '#212529' : 'white',
                 border: 'none',

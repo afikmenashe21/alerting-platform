@@ -254,13 +254,12 @@
   - All credentials must now be provided via environment variables or `.env` file
   - `.env` files are already in `.gitignore` to prevent accidental commits
 
-- **UI Integration for alert-producer (Planned)**: Integration with rule-service-ui for alert generation
-  - HTTP API wrapper around alert-producer functionality
-  - New UI component in rule-service-ui for generating alerts
-  - Support for all CLI configuration options via web interface
+- **UI Integration for alert-producer (Complete)**: Integration with rule-service-ui for alert generation
+  - HTTP API wrapper around alert-producer functionality (`alert-producer-api`)
+  - AlertGenerator UI component with Single Alert Test and Load Test Presets
   - Real-time status monitoring and job tracking
-  - Preset configurations and manual configuration options
-  - See `services/alert-producer/memory-bank/` for detailed design
+  - Single Alert Test: Configurable severity, source, name fields (restored 2026-01-24)
+  - Load Test Presets: Max Burst (100K), Max Load (3 min @ 800 RPS)
 
 - **Sender SMTP to SES Migration (2026-01-23)**: Switched sender from SMTP to AWS SES API
   - Replaced SMTP email sender with AWS SES SDK v2 (sesv2)
