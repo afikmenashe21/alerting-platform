@@ -13,6 +13,7 @@ type GenerateRequest struct {
 	RPS          *float64 `json:"rps,omitempty"`
 	Duration     string   `json:"duration,omitempty"` // e.g., "60s", "5m"
 	BurstSize    *int     `json:"burst,omitempty"`
+	Count        *int     `json:"count,omitempty"`    // Number of alerts to generate (overrides duration)
 	Seed         *int64   `json:"seed,omitempty"`
 	SeverityDist string   `json:"severity_dist,omitempty"`
 	SourceDist   string   `json:"source_dist,omitempty"`
@@ -22,10 +23,12 @@ type GenerateRequest struct {
 	Mock         bool     `json:"mock,omitempty"`
 	Test         bool     `json:"test,omitempty"`
 	SingleTest   bool     `json:"single_test,omitempty"`
-	// Single alert properties (used when single_test is true)
-	Severity     string   `json:"severity,omitempty"` // e.g., "HIGH", "LOW", "MEDIUM", "CRITICAL"
-	Source       string   `json:"source,omitempty"`   // e.g., "api", "db", "cache"
-	Name         string   `json:"name,omitempty"`     // e.g., "timeout", "error", "crash"
+	// Single alert properties (for targeted alerts)
+	ClientID     string   `json:"client_id,omitempty"` // Target client ID (alerts only match rules for this client)
+	Severity     string   `json:"severity,omitempty"`  // e.g., "HIGH", "LOW", "MEDIUM", "CRITICAL"
+	Source       string   `json:"source,omitempty"`    // e.g., "api", "db", "cache"
+	Name         string   `json:"name,omitempty"`      // e.g., "timeout", "error", "crash"
+	IntervalMs   *int     `json:"interval_ms,omitempty"` // Interval between alerts in ms (0 = immediate)
 }
 
 // ToConfig converts a GenerateRequest to a config.Config.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"alert-producer/internal/config"
 	"alert-producer/internal/generator"
@@ -64,8 +65,15 @@ func (jm *JobManager) RunJob(job *Job, kafkaBrokers string) {
 
 		// Run appropriate mode
 		var runErr error
-		if job.Config.SingleTest {
-			// Single test mode - use user-provided values or defaults
+		
+		// Check if custom alert properties are specified (Severity, Source, or Name)
+		hasCustomAlert := job.Config.Severity != "" || job.Config.Source != "" || job.Config.Name != ""
+		
+		// Check if count is specified (for fixed number of alerts)
+		hasCount := job.Config.Count != nil && *job.Config.Count > 0
+		
+		if job.Config.SingleTest || (hasCustomAlert && hasCount && *job.Config.Count == 1) {
+			// Single alert mode - send exactly 1 custom alert
 			severity := job.Config.Severity
 			if severity == "" {
 				severity = "LOW" // Default
@@ -82,6 +90,44 @@ func (jm *JobManager) RunJob(job *Job, kafkaBrokers string) {
 			runErr = alertPublisher.Publish(ctx, customAlert)
 			if runErr == nil {
 				job.IncrementAlertsSent()
+			}
+		} else if hasCustomAlert && hasCount {
+			// Multiple custom alerts with fixed count
+			severity := job.Config.Severity
+			if severity == "" {
+				severity = "LOW"
+			}
+			source := job.Config.Source
+			if source == "" {
+				source = "test-source"
+			}
+			name := job.Config.Name
+			if name == "" {
+				name = "test-name"
+			}
+			
+			count := *job.Config.Count
+			intervalMs := 0
+			if job.Config.IntervalMs != nil {
+				intervalMs = *job.Config.IntervalMs
+			}
+			
+			for i := 0; i < count && ctx.Err() == nil; i++ {
+				customAlert := generator.GenerateCustomAlert(severity, source, name)
+				if err := alertPublisher.Publish(ctx, customAlert); err != nil {
+					runErr = err
+					break
+				}
+				job.IncrementAlertsSent()
+				
+				// Wait interval between alerts (if specified and not last alert)
+				if intervalMs > 0 && i < count-1 {
+					select {
+					case <-ctx.Done():
+						runErr = ctx.Err()
+					case <-time.After(time.Duration(intervalMs) * time.Millisecond):
+					}
+				}
 			}
 		} else if job.Config.Test {
 			// Test mode - track progress in real-time
