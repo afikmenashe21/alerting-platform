@@ -82,6 +82,27 @@ func (s *Sender) Type() string {
 	return "email"
 }
 
+// testDomains contains domains that should be skipped (RFC 2606 reserved + common test domains)
+var testDomains = []string{
+	"@example.com",
+	"@example.org",
+	"@example.net",
+	"@test.com",
+	"@localhost",
+	"@invalid",
+}
+
+// isTestEmail checks if an email address is a test/dummy email that shouldn't be sent
+func isTestEmail(email string) bool {
+	lower := strings.ToLower(email)
+	for _, domain := range testDomains {
+		if strings.HasSuffix(lower, domain) {
+			return true
+		}
+	}
+	return false
+}
+
 // Send sends an email notification using the configured provider.
 func (s *Sender) Send(ctx context.Context, endpointValue string, notification *database.Notification) error {
 	if endpointValue == "" {
@@ -93,10 +114,37 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 		return fmt.Errorf("no valid email recipients provided")
 	}
 
+	// Filter out test emails and validate format
+	var realRecipients []string
+	var skippedRecipients []string
+
 	for _, recipient := range recipients {
 		if !strings.Contains(recipient, "@") {
 			return fmt.Errorf("invalid email address format: %q (missing @ symbol)", recipient)
 		}
+
+		if isTestEmail(recipient) {
+			skippedRecipients = append(skippedRecipients, recipient)
+		} else {
+			realRecipients = append(realRecipients, recipient)
+		}
+	}
+
+	// Log skipped test emails
+	if len(skippedRecipients) > 0 {
+		slog.Info("Skipping test/dummy email addresses",
+			"skipped", strings.Join(skippedRecipients, ", "),
+			"notification_id", notification.NotificationID,
+		)
+	}
+
+	// If all recipients were test emails, mark as successful (nothing to send)
+	if len(realRecipients) == 0 {
+		slog.Info("All recipients are test emails, marking as sent",
+			"notification_id", notification.NotificationID,
+			"skipped_count", len(skippedRecipients),
+		)
+		return nil
 	}
 
 	// Build email payload
@@ -105,7 +153,7 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 	// Create provider request
 	req := &provider.EmailRequest{
 		From:    s.from,
-		To:      recipients,
+		To:      realRecipients,
 		Subject: emailPayload.Subject,
 		Body:    emailPayload.Body,
 		HTML:    emailPayload.HTML,
@@ -115,7 +163,7 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 	if err := s.registry.Send(ctx, req); err != nil {
 		slog.Error("Failed to send email",
 			"error", err,
-			"to", strings.Join(recipients, ", "),
+			"to", strings.Join(realRecipients, ", "),
 			"notification_id", notification.NotificationID,
 		)
 		return err
@@ -123,7 +171,7 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 
 	slog.Info("Successfully sent email",
 		"from", s.from,
-		"to", strings.Join(recipients, ", "),
+		"to", strings.Join(realRecipients, ", "),
 		"subject", emailPayload.Subject,
 		"notification_id", notification.NotificationID,
 		"alert_id", notification.AlertID,
