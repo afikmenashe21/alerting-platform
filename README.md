@@ -65,13 +65,25 @@ The platform receives a stream of alerts, matches them against all active rules 
 
 Measured on a single `t3.small` (2 vCPU, 2 GB RAM) with 6 Kafka partitions:
 
-| Component | Throughput | Latency |
-|-----------|-----------|---------|
-| Alert Producer | ~780 alerts/s | - |
-| Evaluator (2 instances) | ~320 alerts/s | 3.2 ms |
-| Aggregator (2 instances) | ~100 notifications/s | 5.0 ms |
-| Sender | ~120 notifications/s | - |
-| **End-to-end pipeline** | **~320 alerts/s** | - |
+| Component | Throughput | Latency | Notes |
+|-----------|-----------|---------|-------|
+| Alert Producer | ~780 alerts/s | - | Kafka write limit |
+| Evaluator (2 instances) | ~320 alerts/s | 3-160 ms | Depends on matches (see below) |
+| Aggregator (2 instances) | ~100 notifications/s | 5.0 ms | DB insert bound |
+| Sender | ~120 notifications/s | - | Rate limited |
+| **End-to-end pipeline** | **~320 alerts/s** | - | Evaluator is bottleneck |
+
+### Evaluator Latency
+
+Evaluator latency depends on **how many clients match each alert**:
+
+| Scenario | Matching Clients | Latency | Notes |
+|----------|-----------------|---------|-------|
+| Typical production | 1-10 clients | ~3-5 ms | Rule matching is fast |
+| Moderate fan-out | 10-50 clients | ~15-80 ms | Kafka publishing dominates |
+| Worst-case (test data) | 99 clients | ~160 ms | 99 Kafka messages per alert |
+
+The evaluator publishes **one Kafka message per matching client**. With test data where all clients have identical rules, every alert matches all clients, causing high fan-out. In production with diverse rules, most alerts match only a few clients.
 
 **Scaling**: Horizontal via Kafka partitions + ECS task count. See [Performance Scaling Guide](docs/deployment/PERFORMANCE_SCALING.md) for capacity planning up to 5,000 alerts/s.
 
@@ -170,5 +182,21 @@ make run-all           # Run all services
 make run-all-bg        # Run all services in background
 make stop-all          # Stop everything
 make proto-generate    # Generate Go code from .proto files
-make generate-test-data # Create 100 test clients with rules
+make generate-test-data # Generate test data (clients, rules, endpoints)
 ```
+
+## Test Data Generation
+
+Generate test data for load testing:
+
+```bash
+# Local: uses localhost Postgres
+make generate-test-data
+
+# Remote: specify the database DSN
+POSTGRES_DSN="postgres://user:pass@host:5432/db?sslmode=require" make generate-test-data
+```
+
+**Default test data**: 100 clients × 288 rules each = 28,800 rules + 57,600 endpoints
+
+Note: With identical rules across all clients, every alert matches all clients (worst-case fan-out). For realistic testing, use fewer clients or vary the rule patterns per client.

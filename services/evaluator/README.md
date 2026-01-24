@@ -25,9 +25,31 @@ The evaluator is a **stateless, high-throughput** data-plane service. It hot-rel
 
 ## Performance
 
-- ~160 alerts/s per instance (3.2 ms avg latency)
+### Throughput
+- ~160 alerts/s per instance (single-threaded Kafka consumer)
 - Scales horizontally: each instance joins the same consumer group
 - Stateless: no DB writes, no shared mutable state
+
+### Latency
+
+Latency depends on **how many clients match each alert**:
+
+| Matching Clients | Avg Latency | Breakdown |
+|-----------------|-------------|-----------|
+| 1-5 clients | ~3-5 ms | Rule matching (~1ms) + Kafka publish (~2-4ms) |
+| 10-50 clients | ~15-80 ms | Kafka publishing dominates (~1.5ms per message) |
+| 99 clients | ~160 ms | 99 Kafka messages × ~1.6ms each |
+
+**Why latency varies:**
+
+The evaluator publishes **one Kafka message per matching client**. Rule matching itself is fast (O(1) index lookups + set intersection), but Kafka publishing is synchronous and adds ~1.5ms per message.
+
+**Worst-case scenario:** Test data with identical rules across all clients causes every alert to match all clients (maximum fan-out). In production with diverse rules, most alerts match only a few clients.
+
+**Optimization tips:**
+- Use selective rules (avoid `*` wildcards in all fields)
+- Vary rule patterns per client to reduce fan-out
+- Scale horizontally to handle high fan-out scenarios
 
 ## Configuration
 
