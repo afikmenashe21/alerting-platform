@@ -95,6 +95,15 @@
   - Redis connection boilerplate - replaced with metrics.ConnectRedis()
 - [x] All services build successfully with new centralized helpers
 
+## Metrics Service Extraction (2026-01-24)
+- [x] Created dedicated `metrics-service` for dashboard and service metrics
+- [x] Moved database metrics queries from rule-service to metrics-service
+- [x] Moved service metrics handlers from rule-service to metrics-service
+- [x] Updated rule-service-ui to call metrics-service on port 8083
+- [x] Added metrics-service to Terraform (ECR + ECS module)
+- [x] Added metrics-service to known service names in pkg/metrics
+- [x] All tests passing for both services
+
 ## Code health
 - [x] rule-service: comprehensive code cleanup and modularization:
   - Removed redundant code via private helpers (validation, HTTP, JSON parsing)

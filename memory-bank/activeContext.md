@@ -239,6 +239,41 @@ sender/internal/sender/email/
 - Updated sender module environment variables
 - Kept SES IAM permissions as fallback
 
+## Metrics Service Extraction (2026-01-24)
+
+### Overview
+Extracted metrics API from rule-service to a dedicated metrics-service for better separation of concerns.
+
+### Architecture
+- **Port**: 8083
+- **Endpoints**:
+  - `GET /api/v1/metrics` - Database aggregate metrics (notifications, rules, clients, endpoints)
+  - `GET /api/v1/services/metrics` - All service metrics from Redis
+  - `GET /api/v1/services/metrics?service=<name>` - Single service metrics
+
+### Changes Made
+1. **Created `services/metrics-service/`**:
+   - Complete Go service with config, database, handlers, router packages
+   - Dockerfile for containerization
+   - Full test coverage
+
+2. **Cleaned up `rule-service`**:
+   - Removed `internal/database/metrics.go`
+   - Removed `internal/handlers/metrics.go`
+   - Removed metricsReader dependency from Handlers struct
+
+3. **Updated `rule-service-ui`**:
+   - Added `VITE_METRICS_API_URL` for configurable metrics endpoint
+   - Updated Vite proxy for `/metrics-api` route to port 8083
+
+4. **Updated Terraform**:
+   - Added metrics-service to ECR repositories
+   - Added metrics_service ECS module (host network, port 8083)
+
+### Deployment Notes
+- Build Docker image: `docker build -t metrics-service -f services/metrics-service/Dockerfile .`
+- Requires access to PostgreSQL (read-only) and Redis
+
 ## Code health
 - Completed comprehensive cleanup and modularization across all services:
   - Extracted redundant code patterns (validation, error handling, database scanning)
