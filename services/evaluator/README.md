@@ -1,107 +1,85 @@
-# Evaluator Service
+# Evaluator
 
-The evaluator service consumes alerts from Kafka, matches them against rules using in-memory indexes, and publishes matched alerts grouped by client.
+Matches incoming alerts against customer rules using in-memory inverted indexes and publishes one match event per client.
 
-## Overview
+## Role in Pipeline
 
-The evaluator is a stateless, high-throughput service that:
-- Consumes `alerts.new` events from Kafka
-- Matches alerts against rules using fast in-memory inverted indexes
-- Publishes `alerts.matched` events to Kafka with matches grouped by client
-- Hot-reloads rule indexes when rules change (via Redis version polling)
-
-## Documentation
-
-- **[Architecture](docs/ARCHITECTURE.md)** - Detailed service architecture, design patterns, and core concepts
-
-## Building
-
-```bash
-make build
+```
+alerts.new (Kafka) → [evaluator] → alerts.matched (Kafka)
+                         ↑
+                   Redis (rule snapshot)
 ```
 
-Or manually:
-```bash
-go build -o bin/evaluator ./cmd/evaluator
-```
+The evaluator is a **stateless, high-throughput** data-plane service. It hot-reloads rule indexes from Redis without restart.
 
-## Running
+## How It Works
 
-```bash
-make run ARGS="-kafka-brokers localhost:9092 -redis-addr localhost:6379"
-```
+1. On startup, loads the rule snapshot from Redis into memory (warm start)
+2. Polls `rules:version` in Redis to detect rule changes; rebuilds indexes when version increments
+3. For each alert on `alerts.new`:
+   - Looks up candidates in three inverted indexes: `bySeverity`, `bySource`, `byName`
+   - Intersects candidate sets starting from the smallest (fast elimination)
+   - Groups matching rules by `client_id`
+   - Publishes one `alerts.matched` message per client (keyed by `client_id`)
+4. Commits Kafka offset after successful publish
 
-### Command-line Flags
+## Performance
 
-- `-kafka-brokers`: Kafka broker addresses (comma-separated, default: `localhost:9092`)
-- `-alerts-new-topic`: Kafka topic for incoming alerts (default: `alerts.new`)
-- `-alerts-matched-topic`: Kafka topic for matched alerts (default: `alerts.matched`)
-- `-consumer-group-id`: Kafka consumer group ID (default: `evaluator-group`)
-- `-redis-addr`: Redis server address (default: `localhost:6379`)
-- `-version-poll-interval`: Interval for polling Redis version (default: `5s`)
+- ~160 alerts/s per instance (3.2 ms avg latency)
+- Scales horizontally: each instance joins the same consumer group
+- Stateless: no DB writes, no shared mutable state
 
-### Example
+## Configuration
 
-```bash
-./bin/evaluator \
-  -kafka-brokers localhost:9092 \
-  -redis-addr localhost:6379 \
-  -version-poll-interval 10s
-```
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-kafka-brokers` | `localhost:9092` | Kafka broker addresses |
+| `-alerts-new-topic` | `alerts.new` | Input topic |
+| `-alerts-matched-topic` | `alerts.matched` | Output topic |
+| `-consumer-group-id` | `evaluator-group` | Kafka consumer group |
+| `-redis-addr` | `localhost:6379` | Redis address (for rule snapshot) |
+| `-version-poll-interval` | `5s` | How often to check for rule updates |
 
-## Dependencies
-
-- **Kafka**: For consuming `alerts.new` and producing `alerts.matched`
-- **Redis**: For loading rule snapshots and polling version changes
-
-## Event Formats
+## Events
 
 ### Input: `alerts.new`
 
 ```json
 {
-  "alert_id": "550e8400-e29b-41d4-a716-446655440000",
-  "schema_version": 1,
-  "event_ts": 1705257600,
+  "alert_id": "550e8400-...",
   "severity": "HIGH",
   "source": "api",
   "name": "timeout",
-  "context": {
-    "environment": "prod",
-    "region": "us-east-1"
-  }
+  "context": {"region": "us-east-1"}
 }
 ```
 
 ### Output: `alerts.matched`
 
-**One message per client_id** (partitioned by client_id for tenant locality):
+One message per matching client (keyed by `client_id`):
 
 ```json
 {
-  "alert_id": "550e8400-e29b-41d4-a716-446655440000",
-  "schema_version": 1,
-  "event_ts": 1705257600,
+  "alert_id": "550e8400-...",
   "severity": "HIGH",
   "source": "api",
   "name": "timeout",
-  "context": {
-    "environment": "prod",
-    "region": "us-east-1"
-  },
+  "context": {"region": "us-east-1"},
   "client_id": "client-123",
   "rule_ids": ["rule-456", "rule-789"]
 }
 ```
 
-If an alert matches multiple clients, multiple messages are published (one per client).
+## Running
 
-## Key Properties
+```bash
+# From project root: start infrastructure first
+make setup-infra
 
-- **Stateless**: No deduplication (handled by aggregator)
-- **Fast**: In-memory indexes with intersection algorithm
-- **Hot-reloadable**: Polls Redis for rule updates without restart
-- **At-least-once**: Kafka consumer commits offsets after processing
+# Then run this service
+cd services/evaluator
+make run-all
+```
 
 ## Testing
 
@@ -109,87 +87,9 @@ If an alert matches multiple clients, multiple messages are published (one per c
 make test
 ```
 
-## Quick Start
+## Key Properties
 
-The fastest way to get started:
-
-```bash
-make run-all
-```
-
-This single command will:
-- ✅ Verify Docker is running
-- ✅ Verify centralized infrastructure (Kafka, Redis) is available
-- ✅ Verify connectivity to Kafka and Redis
-- ✅ Download/update Go dependencies
-- ✅ Create test rule snapshot if missing (for testing)
-- ✅ Build the evaluator
-- ✅ Run the evaluator
-
-**Note:** Infrastructure (Kafka, Redis, Postgres) is managed centrally. Start it from the root directory:
-```bash
-cd ../.. && make setup-infra
-```
-
-### Manual Setup
-
-If you prefer step-by-step setup:
-
-1. **Ensure centralized infrastructure is running:**
-   ```bash
-   cd ../.. && make setup-infra
-   ```
-
-2. **Create test rule snapshot (optional, for testing):**
-   ```bash
-   make create-test-snapshot
-   ```
-   This creates 3 test rules for development. In production, `rule-updater` creates snapshots from the database.
-
-3. **Build and run:**
-   ```bash
-   make build
-   make run
-   ```
-
-### Testing the Pipeline
-
-1. Produce alerts using alert-producer:
-   ```bash
-   cd ../alert-producer
-   make run ARGS="-burst 10"
-   ```
-
-2. Watch evaluator logs - it should process alerts and publish matches
-
-3. Check matched alerts in Kafka:
-   ```bash
-   docker exec alerting-platform-kafka kafka-console-consumer \
-     --bootstrap-server localhost:9092 \
-     --topic alerts.matched \
-     --from-beginning \
-     --max-messages 5
-   ```
-
-## Troubleshooting
-
-### "Failed to connect to Redis"
-- Ensure centralized infrastructure is running: `cd ../.. && make setup-infra`
-- Verify Redis container: `docker ps | grep redis`
-- Check Redis logs: `docker logs alerting-platform-redis`
-
-### "Failed to load initial snapshot"
-- The snapshot doesn't exist in Redis yet
-- Run `rule-updater` service to create snapshots from the database
-- Or create a test snapshot: `make create-test-snapshot`
-
-### "Failed to create Kafka consumer"
-- Ensure centralized infrastructure is running: `cd ../.. && make setup-infra`
-- Verify Kafka container: `docker ps | grep kafka`
-- Wait 10-15 seconds for Kafka to initialize
-- Check Kafka logs: `docker logs alerting-platform-kafka`
-
-### Infrastructure Issues
-- All infrastructure is managed centrally from the root directory
-- See `docs/architecture/INFRASTRUCTURE.md` for details
-- Use `cd ../.. && make setup-infra` to start all infrastructure
+- **Stateless**: No deduplication responsibility (handled by aggregator)
+- **Hot-reloadable**: Picks up rule changes via Redis version polling
+- **At-least-once**: Commits offset only after successful publish
+- **Horizontally scalable**: Multiple instances share partitions via consumer group

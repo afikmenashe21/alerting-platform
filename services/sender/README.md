@@ -1,307 +1,115 @@
-# Sender Service
+# Sender
 
-The sender service consumes `notifications.ready` events from Kafka, fetches notifications and email endpoints from the database, sends email notifications (stub implementation for MVP), and updates notification status to SENT.
+Delivers notifications via email (SMTP/Resend/SES), Slack, and webhooks. Final step in the alerting pipeline.
 
-## Overview
+## Role in Pipeline
 
-The sender service is the final step in the alerting platform pipeline:
-
-1. **Consumes** `notifications.ready` events from Kafka
-2. **Fetches** notification details from Postgres
-3. **Queries** email endpoints for matching rule IDs
-4. **Sends** email notifications (stub: logs for MVP)
-5. **Updates** notification status to SENT
-
-## Features
-
-- ✅ Kafka consumer with at-least-once delivery semantics
-- ✅ Idempotent processing (skips if already SENT)
-- ✅ Multi-channel sending (email, Slack, webhooks)
-- ✅ Strategy pattern for extensible sender types
-- ✅ Graceful shutdown handling
-- ✅ Structured logging
-
-## Documentation
-
-All documentation is available in the [`docs/`](docs/) directory:
-
-- **[Documentation Index](docs/README.md)** - Complete documentation index
-- **[Architecture](docs/ARCHITECTURE.md)** - Service architecture and design patterns
-- **[Gmail SMTP Setup](docs/GMAIL_SETUP.md)** - Complete guide for configuring Gmail SMTP
-- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions for email sending
-- **[Testing Guide](docs/TESTING.md)** - Testing strategies and test coverage
-
-## Quick Start
-
-### Prerequisites
-
-- Go 1.22+
-- Docker and Docker Compose
-- Postgres database with `notifications` and `endpoints` tables
-- Kafka with `notifications.ready` topic
-
-### One-Command Setup and Run
-
-The easiest way to get started:
-
-```bash
-make run-all
+```
+notifications.ready (Kafka) → [sender] → Email / Slack / Webhook
+                                  ↕
+                           Postgres (notifications + endpoints)
 ```
 
-This will:
-1. ✅ Verify Go 1.22+ is installed
-2. ✅ Check Docker is installed and running
-3. ✅ Download Go dependencies
-4. ✅ Start Postgres, Kafka, and Zookeeper
-5. ✅ Wait for services to be ready
-6. ✅ Create Kafka topics
-7. ✅ Build and run the sender service
+The sender reads notification details from the database, resolves delivery endpoints for the matching rules, sends via the appropriate channel, and updates the notification status to `SENT`.
 
-### Manual Setup
+## How It Works
+
+1. Consumes `notifications.ready` messages from Kafka
+2. Fetches the notification record from Postgres
+3. Checks if already `SENT` (idempotency guard)
+4. Queries `endpoints` table for all enabled endpoints matching the notification's `rule_ids`
+5. Sends via the appropriate channel (email, Slack, webhook) using a strategy pattern
+6. Updates notification status to `SENT`
+7. Commits Kafka offset
+
+## Delivery Channels
+
+| Channel | Implementation | Configuration |
+|---------|---------------|---------------|
+| **Email** | SMTP, Resend API, AWS SES | `SMTP_*` or `RESEND_API_KEY` or `AWS_*` env vars |
+| **Slack** | Webhook POST | Endpoint value = webhook URL |
+| **Webhook** | HTTP POST with JSON payload | Endpoint value = target URL |
+
+### Email Configuration
 
 ```bash
-# Download dependencies
-make deps
+# SMTP (Gmail, MailHog, etc.)
+export SMTP_HOST=smtp.gmail.com
+export SMTP_PORT=587
+export SMTP_USER=you@gmail.com
+export SMTP_PASSWORD=app-password
+export SMTP_FROM=you@gmail.com
 
-# Start infrastructure
-make setup
+# Or Resend API
+export RESEND_API_KEY=re_...
+export EMAIL_PROVIDER=resend
 
-# Build
-make build
-
-# Run
-make run
+# Or AWS SES
+export AWS_REGION=us-east-1
+export EMAIL_PROVIDER=ses
 ```
+
+For local testing, MailHog is included in infrastructure (SMTP on port 1025, UI on port 8025).
+
+### Rate Limiting
+
+Email sending is rate-limited via a token bucket at the provider level:
+- Default: 2 sends/second (configurable via `EMAIL_RATE_LIMIT`)
+- Test email domains (`@example.com`, `@test.com`, `@localhost`) are skipped automatically
 
 ## Configuration
 
-The service accepts the following command-line flags:
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-kafka-brokers` | `localhost:9092` | Kafka broker addresses |
+| `-notifications-ready-topic` | `notifications.ready` | Input topic |
+| `-consumer-group-id` | `sender-group` | Kafka consumer group |
+| `-postgres-dsn` | `postgres://...` | Postgres connection string |
 
-- `-kafka-brokers`: Kafka broker addresses (default: `localhost:9092`)
-- `-notifications-ready-topic`: Kafka topic name (default: `notifications.ready`)
-- `-consumer-group-id`: Kafka consumer group ID (default: `sender-group`)
-- `-postgres-dsn`: PostgreSQL connection string (default: `postgres://postgres:postgres@localhost:5432/alerting?sslmode=disable`)
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `SMTP_HOST` | `localhost` | SMTP server |
+| `SMTP_PORT` | `1025` | SMTP port |
+| `SMTP_USER` | - | SMTP username |
+| `SMTP_PASSWORD` | - | SMTP password |
+| `SMTP_FROM` | `alerts@alerting-platform.local` | From address |
+| `EMAIL_RATE_LIMIT` | `2` | Sends per second |
+| `EMAIL_PROVIDER` | auto | Force provider: `resend`, `ses`, or SMTP |
 
-### Email Configuration (Environment Variables)
+## Events
 
-The email sender can be configured via environment variables:
+### Input: `notifications.ready`
 
-- `SMTP_HOST`: SMTP server hostname (default: `localhost`)
-- `SMTP_PORT`: SMTP server port (default: `1025`)
-- `SMTP_USER`: SMTP username (optional, required for authenticated SMTP)
-- `SMTP_PASSWORD`: SMTP password (optional, required for authenticated SMTP)
-- `SMTP_FROM`: Email address to send from (default: `alerts@alerting-platform.local`)
-
-**Configuration Options:**
-- Use environment variables directly: `export SMTP_HOST=...`
-- Use a `.env` file: Copy `.env.example` to `.env` and fill in your credentials
-- Use a secrets manager in production environments
-
-See `.env.example` in the sender directory for a template.
-
-#### Gmail Configuration
-
-For detailed Gmail SMTP setup instructions, see **[Gmail SMTP Setup Guide](docs/GMAIL_SETUP.md)**.
-
-Quick setup:
-```bash
-export SMTP_HOST=smtp.gmail.com
-export SMTP_PORT=587
-export SMTP_USER=your-email@gmail.com
-export SMTP_PASSWORD=your-app-password
-export SMTP_FROM=your-email@gmail.com
+```json
+{
+  "notification_id": "550e8400-...",
+  "client_id": "client-456",
+  "alert_id": "alert-123"
+}
 ```
 
-**Important**: 
-- Replace `your-email@gmail.com` with your actual Gmail address
-- Replace `your-app-password` with a Gmail App Password (required if 2FA is enabled)
-- Never commit credentials to version control - use environment variables or a `.env` file
-
-#### Local Testing with MailHog
-
-For local testing, use MailHog (included in infrastructure):
+## Running
 
 ```bash
-export SMTP_HOST=localhost
-export SMTP_PORT=1025
-export SMTP_FROM=alerts@alerting-platform.local
-# SMTP_USER and SMTP_PASSWORD not needed for MailHog
+# From project root: start infrastructure first
+make setup-infra && make run-migrations
+
+# Then run this service
+cd services/sender
+make run-all
 ```
 
-View captured emails at: http://localhost:8025
-
-## Architecture
-
-### Processing Flow
-
-```
-Kafka (notifications.ready)
-    ↓
-Consumer reads event
-    ↓
-Fetch notification from DB
-    ↓
-Check if already SENT (idempotency)
-    ↓
-Query email endpoints for rule_ids
-    ↓
-Send email (stub: log)
-    ↓
-Update status to SENT
-    ↓
-Commit Kafka offset
-```
-
-### Idempotency
-
-The service implements idempotency at multiple levels:
-
-1. **Status Check**: Before sending, checks if notification is already SENT
-2. **Status Update**: After successful send, updates status atomically
-3. **Safe Retry**: If status update fails, retry will skip (already sent check)
-
-This ensures at-least-once delivery semantics: if the service crashes after sending but before updating status, Kafka will redeliver, but the service will skip (already sent).
-
-### Email Sender
-
-The email sender is currently a stub implementation that logs email details. It's designed to be extensible:
-
-- `Sender` struct can hold multiple sender implementations
-- `SendNotification` aggregates endpoints from all matching rules
-- Collects unique email addresses to avoid duplicates
-
-Future enhancements:
-- Real email service integration (SendGrid, SES, etc.)
-- Slack sender
-- Webhook sender
-
-## Database Schema
-
-The service queries two tables:
-
-### notifications (data-plane)
-- `notification_id` (PK)
-- `client_id`, `alert_id`
-- `severity`, `source`, `name`
-- `context` (JSONB)
-- `rule_ids` (TEXT[])
-- `status` (RECEIVED, SENT)
-
-### endpoints (control-plane)
-- `endpoint_id` (PK)
-- `rule_id` (FK)
-- `type` (email, webhook, slack)
-- `value` (email address, URL, etc.)
-- `enabled` (boolean)
-
-## Makefile Targets
-
-- `make build` - Build the binary
-- `make run` - Run the service
-- `make test` - Run tests
-- `make clean` - Remove build artifacts
-- `make deps` - Download dependencies
-- `make run-all` - Setup and run (recommended)
-- `make setup` - Start infrastructure and create topics
-- `make up` - Start Docker services
-- `make down` - Stop Docker services
-- `make logs` - View Docker logs
-- `make db-query` - Query recent notifications
-- `make db-count` - Count notifications by status
-- `make db-sent` - Show SENT notifications
-
-## Development
-
-### Project Structure
-
-```
-sender/
-├── cmd/
-│   └── sender/
-│       └── main.go          # Main entry point
-├── internal/
-│   ├── config/
-│   │   └── config.go        # Configuration
-│   ├── consumer/
-│   │   └── consumer.go      # Kafka consumer
-│   ├── database/
-│   │   └── database.go      # Database operations
-│   ├── events/
-│   │   └── events.go        # Event structures
-│   └── sender/
-│       ├── sender.go        # Multi-channel sender coordinator
-│       ├── email/           # Email sender implementation
-│       ├── slack/           # Slack sender implementation
-│       ├── webhook/         # Webhook sender implementation
-│       ├── strategy/        # Strategy pattern for senders
-│       └── payload/         # Payload builders
-├── docs/                    # 📚 All documentation
-│   ├── README.md           # Documentation index
-│   ├── ARCHITECTURE.md     # Architecture and design patterns
-│   ├── GMAIL_SETUP.md      # Gmail SMTP configuration guide
-│   ├── TROUBLESHOOTING.md  # Troubleshooting guide
-│   └── TESTING.md          # Testing guide
-├── scripts/
-│   └── run-all.sh           # Setup and run script
-├── memory-bank/             # Service memory bank (design decisions)
-├── .env.example             # Environment variable template
-├── Makefile                 # Build and run targets
-└── go.mod                   # Go dependencies
-```
-
-### Adding New Sender Types
-
-To add a new sender type (e.g., Slack):
-
-1. Add sender implementation in `internal/sender/`:
-   ```go
-   func (s *Sender) SendSlack(ctx context.Context, webhookURL string, notification *database.Notification) error {
-       // Implementation
-   }
-   ```
-
-2. Update `SendNotification` to route to appropriate sender based on endpoint type
-
-3. Query endpoints with the new type in `GetEmailEndpointsByRuleIDs` or create a new method
+See `.env.example` for email configuration template.
 
 ## Testing
 
-See **[Testing Guide](docs/TESTING.md)** for detailed testing information.
-
 ```bash
-# Run tests
 make test
-
-# Check database
-make db-query
-make db-count
-make db-sent
 ```
 
-## Troubleshooting
+## Key Properties
 
-For detailed troubleshooting information, see **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)**.
-
-### Quick Troubleshooting
-
-**Service won't start:**
-- Check Docker is running: `docker ps`
-- Check Postgres is ready: `docker exec alerting-platform-postgres pg_isready -U postgres`
-- Check Kafka is ready: `docker exec alerting-platform-kafka kafka-broker-api-versions --bootstrap-server localhost:9092`
-
-**No notifications being processed:**
-- Check Kafka topic exists: `docker exec alerting-platform-kafka kafka-topics --list --bootstrap-server localhost:9092`
-- Check notifications exist: `make db-query`
-- Check notifications have RECEIVED status: `make db-count`
-- Check service logs for errors
-
-**Emails not being sent:**
-- Check email endpoints exist in `endpoints` table
-- Check endpoints are enabled (`enabled = TRUE`)
-- Check endpoints have type `email`
-- Check rule_ids in notification match rule_ids with endpoints
-- See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for email-specific issues
-
-## License
-
-This is an alerting platform project for learning system design and Go implementation.
+- **Idempotent**: Skips if notification is already `SENT`
+- **Multi-channel**: Strategy pattern selects sender based on endpoint type
+- **Rate-limited**: Token bucket prevents external API rate limit errors
+- **At-least-once**: May re-send after crash (mitigated by status check + provider idempotency keys)

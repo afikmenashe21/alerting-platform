@@ -1,163 +1,172 @@
 # Alerting Platform
 
-A multi-service Go application implementing an end-to-end alert notification platform with Kafka, Postgres, and Redis.
+A multi-service event-driven platform that evaluates incoming alerts against customer-defined rules and delivers notifications via email, Slack, and webhooks. Built with Go, Kafka, Postgres, and Redis.
 
-**Status**: ✅ Deployed to AWS ECS - Production-ready MVP
+## Purpose
 
-## Quick Start
+Customers (tenants) define rules like: *"If alert has severity=HIGH and source=payments, notify me via email."*
 
-**Production Deployment**: See [`docs/deployment/README.md`](docs/deployment/README.md) for AWS ECS deployment guides and status.
-
-**Local Development**:
-
-```bash
-# 1. Start all infrastructure and run all services (one command!)
-make run-all
-```
-
-This single command will:
-- ✅ Start infrastructure (Postgres, Kafka, Redis, Zookeeper) if not running
-- ✅ Run all migrations automatically (including wildcard support migration)
-- ✅ Start all services
-
-**Or step by step:**
-```bash
-# 1. Start all infrastructure
-make setup-infra
-
-# 2. Run all migrations
-make run-migrations
-
-# 3. Create Kafka topics
-make create-topics
-
-# 4. Run all services
-make run-all
-```
-
-## Services
-
-All services are located in `services/`:
-
-- **rule-service** - HTTP API for managing clients, rules, and endpoints
-- **rule-updater** - Consumes `rule.changed` events, updates Redis snapshots
-- **evaluator** - Matches alerts against rules, emits `alerts.matched`
-- **aggregator** - Deduplicates notifications, emits `notifications.ready`
-- **sender** - Sends notifications via email (SMTP), Slack, and webhooks
-- **alert-producer** - Generates and publishes test alerts
+The platform receives a stream of alerts, matches them against all active rules in real-time, deduplicates notifications, and delivers them reliably with at-least-once semantics.
 
 ## Architecture
 
-See `memory-bank/projectbrief.md` for the complete architecture overview.
+```
+                         ┌──────────────┐
+                         │ rule-service  │  CRUD API (rules, clients, endpoints)
+                         │   (HTTP)      │
+                         └──────┬───────┘
+                                │ rule.changed
+                                ▼
+┌──────────────┐       ┌──────────────┐       ┌──────────────┐
+│alert-producer│       │ rule-updater  │       │    Redis      │
+│  (source)    │       │              │──────▶│  (snapshot)   │
+└──────┬───────┘       └──────────────┘       └──────┬───────┘
+       │ alerts.new                                   │ warm start
+       ▼                                              ▼
+┌──────────────┐       ┌──────────────┐       ┌──────────────┐
+│  evaluator   │──────▶│  aggregator   │──────▶│    sender     │
+│ (rule match) │       │  (dedupe)     │       │ (deliver)     │
+└──────────────┘       └──────────────┘       └──────────────┘
+  alerts.matched         notifications.ready     Email/Slack/Webhook
+```
 
-## Production Deployment (AWS)
+### Data Flow
 
-Deploy to AWS ECS with Terraform:
+1. **alert-producer** publishes alerts to Kafka topic `alerts.new`
+2. **rule-service** exposes a REST API for managing clients, rules, and notification endpoints; publishes `rule.changed` events
+3. **rule-updater** consumes `rule.changed`, rebuilds a Redis rule snapshot with inverted indexes
+4. **evaluator** consumes `alerts.new`, matches against rules using in-memory indexes (warm-started from Redis), publishes one `alerts.matched` message per matching client
+5. **aggregator** consumes `alerts.matched`, performs idempotent insert into Postgres (dedup boundary: unique `client_id + alert_id`), publishes `notifications.ready`
+6. **sender** consumes `notifications.ready`, delivers via the configured endpoint (email/Slack/webhook), updates status to `SENT`
+
+## Services
+
+| Service | Role | Port | Kafka Topics |
+|---------|------|------|--------------|
+| **rule-service** | REST API for rules, clients, endpoints | 8081 | Produces: `rule.changed` |
+| **rule-updater** | Maintains Redis rule snapshot | - | Consumes: `rule.changed` |
+| **evaluator** | Matches alerts to rules | - | Consumes: `alerts.new`, Produces: `alerts.matched` |
+| **aggregator** | Deduplicates notifications | - | Consumes: `alerts.matched`, Produces: `notifications.ready` |
+| **sender** | Delivers notifications | - | Consumes: `notifications.ready` |
+| **alert-producer** | Generates/publishes alerts (test + API) | 8082 | Produces: `alerts.new` |
+| **metrics-service** | Exposes pipeline metrics | 8083 | - |
+
+## Key Design Decisions
+
+- **Idempotency boundary**: Deduplication is enforced at the aggregator via a Postgres unique constraint on `(client_id, alert_id)`, not in-memory. This survives crashes and redeliveries.
+- **Rule distribution**: Rules are indexed in Redis as a snapshot; evaluator loads them into memory on startup and refreshes on version change. No full DB scan per alert.
+- **Fast matching**: Three inverted indexes (`bySeverity`, `bySource`, `byName`) with set intersection starting from the smallest candidate set.
+- **Partitioning**: `alerts.new` keyed by `alert_id` (even distribution), `alerts.matched` keyed by `client_id` (tenant locality).
+- **At-least-once delivery**: All Kafka consumers commit offsets after durable progress. Duplicates are safe due to the idempotency boundary.
+
+## Performance
+
+Measured on a single `t3.small` (2 vCPU, 2 GB RAM) with 6 Kafka partitions:
+
+| Component | Throughput | Latency |
+|-----------|-----------|---------|
+| Alert Producer | ~780 alerts/s | - |
+| Evaluator (2 instances) | ~320 alerts/s | 3.2 ms |
+| Aggregator (2 instances) | ~100 notifications/s | 5.0 ms |
+| Sender | ~120 notifications/s | - |
+| **End-to-end pipeline** | **~320 alerts/s** | - |
+
+**Scaling**: Horizontal via Kafka partitions + ECS task count. See [Performance Scaling Guide](docs/deployment/PERFORMANCE_SCALING.md) for capacity planning up to 5,000 alerts/s.
+
+**Current bottlenecks**: Single Kafka broker (~800/s write limit), memory constraint on t3.small (~38 MB free after all services).
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Language | Go 1.22+ |
+| Messaging | Apache Kafka (segmentio/kafka-go) |
+| Database | PostgreSQL 15 |
+| Cache | Redis 7 |
+| Serialization | Protocol Buffers |
+| Infrastructure | Docker Compose (local), Terraform + AWS ECS (production) |
+| CI/CD | GitHub Actions |
+| UI | React + Vite |
+
+## Quick Start
+
+```bash
+# One command to start everything locally:
+make run-all
+```
+
+This starts infrastructure (Postgres, Kafka, Redis, Zookeeper), runs migrations, and launches all services.
+
+**Step by step:**
+
+```bash
+make setup-infra      # Start infrastructure containers
+make run-migrations   # Run database migrations
+make create-topics    # Create Kafka topics
+make run-all          # Start all services
+```
+
+See [docs/guides/SETUP.md](docs/guides/SETUP.md) for the complete local setup guide.
+
+## Project Structure
+
+```
+alerting-platform/
+├── services/              # Microservices (each with Dockerfile, Makefile, go.mod)
+│   ├── rule-service/      # REST API
+│   ├── rule-updater/      # Redis snapshot builder
+│   ├── evaluator/         # Alert-to-rule matcher
+│   ├── aggregator/        # Notification deduplicator
+│   ├── sender/            # Notification delivery
+│   ├── alert-producer/    # Alert generator (test + API)
+│   └── metrics-service/   # Pipeline metrics API
+├── proto/                 # Protobuf definitions (alerts, rules, notifications)
+├── pkg/                   # Shared Go packages (kafka, proto, metrics, shared)
+├── terraform/             # AWS infrastructure (VPC, ECS, RDS, Redis, Kafka)
+├── scripts/               # Infrastructure, deployment, migration, test scripts
+├── rule-service-ui/       # React frontend for rule management
+├── docs/                  # Architecture, deployment, and feature documentation
+├── migrations/            # Database schema (init-schema.sql)
+├── docker-compose.yml     # Local infrastructure
+└── Makefile               # Root-level orchestration commands
+```
+
+## Production Deployment
+
+Deployed on AWS ECS with Terraform:
 
 ```bash
 cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars - set db_password
-terraform init && terraform apply
-
-# Build and push Docker images
-./scripts/deployment/build-and-push.sh
-
-# Update ECS services
-./scripts/deployment/update-services.sh
+cp terraform.tfvars.example terraform.tfvars  # Configure
+terraform init && terraform apply             # Deploy infrastructure
+./scripts/deployment/build-and-push.sh        # Build and push Docker images
+./scripts/deployment/update-services.sh       # Update ECS services
 ```
 
-See `docs/deployment/` for complete guides:
-- `QUICKSTART.md` - Deploy in 30 minutes
-- `PRODUCTION_DEPLOYMENT.md` - Full production guide
-- `PREREQUISITES.md` - Required tools and credentials
-- `ULTRA_LOW_COST.md` - Deploy for ~$5-10/month
+See [docs/deployment/](docs/deployment/) for complete guides:
+- [Production Deployment](docs/deployment/PRODUCTION_DEPLOYMENT.md) — full production guide
+- [Prerequisites](docs/deployment/PREREQUISITES.md) — required tools and credentials
+- [Performance Scaling](docs/deployment/PERFORMANCE_SCALING.md) — load test results and scaling strategies
+- [Ultra Low Cost](docs/deployment/ULTRA_LOW_COST.md) — deploy for ~$15/month
 
 ## Documentation
 
-Documentation is organized in the `docs/` directory:
-
-- **Deployment** (`docs/deployment/`):
-  - `QUICKSTART.md` - 30-minute deployment guide
-  - `PRODUCTION_DEPLOYMENT.md` - Complete production guide
-  - `PREREQUISITES.md` - Tools and credentials setup
-  - `ULTRA_LOW_COST.md` - Ultra-low-cost configuration
-
-- **Guides** (`docs/guides/`):
-  - `SETUP.md` - Complete local setup guide
-
-- **Architecture** (`docs/architecture/`):
-  - `INFRASTRUCTURE.md` - Infrastructure management details
-  - `PROTOBUF_TOOLING.md` - Protobuf tooling and validation
-  - `PROTOBUF_ENUM_DESIGN.md` - Protobuf enum design decision
-
-- **Features** (`docs/features/`):
-  - `WILDCARD_RULES_DESIGN.md` - Wildcard rules design
-  - `WILDCARD_RULES_USAGE.md` - Wildcard rules usage
-
-See `docs/README.md` for complete documentation index.
+- **[docs/guides/SETUP.md](docs/guides/SETUP.md)** — complete local development setup
+- **[docs/deployment/](docs/deployment/)** — production deployment guides
+- **[docs/architecture/](docs/architecture/)** — infrastructure and protobuf documentation
+- **[docs/features/](docs/features/)** — wildcard rules design and usage
+- **[proto/README.md](proto/README.md)** — protobuf schema and code generation
 
 ## Make Targets
 
 ```bash
 make help              # Show all available targets
-make setup-infra        # Start all infrastructure
-make verify-deps        # Verify dependencies
-make run-migrations     # Run all migrations
-make create-topics      # Create Kafka topics
-make run-all            # Run all services
-make run-all-bg         # Run all services in background
+make setup-infra       # Start infrastructure (Postgres, Kafka, Redis, Zookeeper)
+make run-migrations    # Run all database migrations
+make create-topics     # Create Kafka topics
+make run-all           # Run all services
+make run-all-bg        # Run all services in background
+make stop-all          # Stop everything
+make proto-generate    # Generate Go code from .proto files
+make generate-test-data # Create 100 test clients with rules
 ```
-
-## Directory Structure
-
-```
-alerting-platform/
-├── services/           # All services (with Dockerfiles)
-│   ├── rule-service/
-│   ├── rule-updater/
-│   ├── evaluator/
-│   ├── aggregator/
-│   ├── sender/
-│   └── alert-producer/
-├── terraform/         # AWS infrastructure (Terraform)
-│   ├── main.tf
-│   └── modules/       # VPC, ECS, RDS, Redis, Kafka, ALB
-├── docs/              # Documentation
-│   ├── deployment/    # Production deployment guides
-│   ├── guides/        # Setup and quick start guides
-│   ├── architecture/  # Architecture docs
-│   └── features/      # Feature documentation
-├── scripts/           # Centralized scripts
-│   ├── infrastructure/  # Setup and verify scripts
-│   ├── migrations/      # DB migration scripts
-│   └── deployment/      # Build/push/update scripts
-├── migrations/        # Database schema (init-schema.sql)
-├── memory-bank/       # Project memory bank (design decisions)
-├── proto/             # Protobuf definitions
-├── pkg/               # Shared Go packages
-├── rule-service-ui/   # React UI for rule-service
-├── docker-compose.yml # Local infrastructure
-└── Makefile           # Root-level commands
-```
-
-## Infrastructure
-
-All infrastructure is managed centrally:
-- **Postgres** - `alerting-platform-postgres` (port 5432)
-- **Kafka** - `alerting-platform-kafka` (port 9092)
-- **Zookeeper** - `alerting-platform-zookeeper` (port 2181)
-- **Redis** - `alerting-platform-redis` (port 6379)
-
-Services verify dependencies but do NOT manage them.
-
-## Development
-
-Each service has its own `run-all.sh` script that:
-1. Verifies Go installation
-2. Verifies centralized infrastructure
-3. Downloads dependencies
-4. Builds the service
-5. Runs the service
-
-See individual service READMEs for service-specific details.
