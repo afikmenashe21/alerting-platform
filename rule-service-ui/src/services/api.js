@@ -1,13 +1,20 @@
 // API base URLs - configurable for production deployment
 // In production: set VITE_API_GATEWAY_URL=https://xxx.execute-api.region.amazonaws.com
 // In development: uses Vite proxy (see vite.config.js)
-const API_BASE_URL = import.meta.env.VITE_API_GATEWAY_URL
-  ? `${import.meta.env.VITE_API_GATEWAY_URL}/api/v1`
+//
+// API Gateway routes:
+//   /api/*              -> rule-service (port 8081)
+//   /metrics-api/*      -> metrics-service (port 8083)
+//   /alert-producer-api/* -> alert-producer (port 8082)
+const API_GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || '';
+
+const API_BASE_URL = API_GATEWAY_URL
+  ? `${API_GATEWAY_URL}/api/v1`
   : '/api/v1';
 
-// Metrics API base URL - separate service on port 8083
-const METRICS_API_BASE_URL = import.meta.env.VITE_METRICS_API_URL
-  ? `${import.meta.env.VITE_METRICS_API_URL}/api/v1`
+// Metrics API base URL - routes through same API Gateway
+const METRICS_API_BASE_URL = API_GATEWAY_URL
+  ? `${API_GATEWAY_URL}/metrics-api/api/v1`
   : '/metrics-api/api/v1';
 
 async function handleResponse(response) {
@@ -276,8 +283,8 @@ export const serviceMetricsAPI = {
 // Alert producer URL - routed through API Gateway
 // In production: uses same VITE_API_GATEWAY_URL with /alert-producer-api prefix
 // In development: uses Vite proxy (see vite.config.js)
-const ALERT_PRODUCER_API_BASE = import.meta.env.VITE_API_GATEWAY_URL 
-  ? `${import.meta.env.VITE_API_GATEWAY_URL}/alert-producer-api/api/v1/alerts`
+const ALERT_PRODUCER_API_BASE = API_GATEWAY_URL
+  ? `${API_GATEWAY_URL}/alert-producer-api/api/v1/alerts`
   : '/alert-producer-api/api/v1/alerts';
 
 export const alertGeneratorAPI = {

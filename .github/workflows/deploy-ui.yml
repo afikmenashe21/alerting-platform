@@ -4,11 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       api_gateway_url:
-        description: 'API Gateway URL for rule-service (e.g., http://34.201.202.8:8081)'
-        required: true
-        type: string
-      metrics_api_url:
-        description: 'Metrics API URL for metrics-service (e.g., http://34.201.202.8:8083)'
+        description: 'API Gateway HTTPS URL (e.g., https://xxx.execute-api.us-east-1.amazonaws.com)'
         required: true
         type: string
 
@@ -39,12 +35,11 @@ jobs:
         working-directory: rule-service-ui
         run: npm ci
 
-      - name: Build with API URLs
+      - name: Build with API Gateway URL
         working-directory: rule-service-ui
         env:
           VITE_BASE_PATH: /alerting-platform/
           VITE_API_GATEWAY_URL: ${{ inputs.api_gateway_url }}
-          VITE_METRICS_API_URL: ${{ inputs.metrics_api_url }}
         run: npm run build
 
       - name: Upload artifact

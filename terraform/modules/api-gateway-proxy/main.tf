@@ -37,6 +37,15 @@ resource "aws_apigatewayv2_integration" "alert_producer" {
   integration_uri    = "http://${var.backend_ip}:8082/{proxy}"
 }
 
+# Integration for metrics-service
+# Route captures /metrics-api/{proxy+}, integration forwards as /{proxy}
+resource "aws_apigatewayv2_integration" "metrics_service" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+  integration_uri    = "http://${var.backend_ip}:8083/{proxy}"
+}
+
 # Route: /api/* -> rule-service
 # Captures: /api/v1/clients -> proxy=v1/clients -> backend gets /api/v1/clients
 resource "aws_apigatewayv2_route" "rule_service" {
@@ -51,6 +60,14 @@ resource "aws_apigatewayv2_route" "alert_producer" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /alert-producer-api/{proxy+}"
   target    = "integrations/${aws_apigatewayv2_integration.alert_producer.id}"
+}
+
+# Route: /metrics-api/* -> metrics-service
+# Captures: /metrics-api/api/v1/metrics -> proxy=api/v1/metrics -> backend gets /api/v1/metrics
+resource "aws_apigatewayv2_route" "metrics_service" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /metrics-api/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.metrics_service.id}"
 }
 
 # Default stage with auto-deploy
