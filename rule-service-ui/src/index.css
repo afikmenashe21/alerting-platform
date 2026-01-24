@@ -40,18 +40,46 @@ code {
 
 .nav {
   display: flex;
-  gap: 15px;
+  gap: 8px;
   margin-top: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.nav-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #95a5a6;
+  margin-right: 4px;
+}
+
+.nav-group-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-divider {
+  width: 1px;
+  height: 28px;
+  background-color: #4a5f7a;
+  margin: 0 12px;
 }
 
 .nav button {
   background-color: #34495e;
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 8px 16px;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   transition: background-color 0.3s;
 }
 

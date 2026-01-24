@@ -9,60 +9,60 @@ import Services from './components/Services';
 import './index.css';
 
 function App() {
-  const [activeTab, setActiveTab] = useState('metrics');
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  const navGroups = [
+    {
+      label: 'Monitoring',
+      tabs: [
+        { id: 'dashboard', label: 'Dashboard' },
+        { id: 'metrics', label: 'Metrics' },
+      ]
+    },
+    {
+      label: 'Configuration',
+      tabs: [
+        { id: 'clients', label: 'Clients' },
+        { id: 'rules', label: 'Rules' },
+        { id: 'endpoints', label: 'Endpoints' },
+        { id: 'notifications', label: 'Notifications' },
+      ]
+    },
+    {
+      label: 'Testing',
+      tabs: [
+        { id: 'alerts', label: 'Load Test' },
+      ]
+    }
+  ];
 
   return (
     <div className="container">
       <div className="header">
         <h1>Alerting Platform</h1>
         <div className="nav">
-          <button
-            className={activeTab === 'metrics' ? 'active' : ''}
-            onClick={() => setActiveTab('metrics')}
-          >
-            Dashboard
-          </button>
-          <button
-            className={activeTab === 'services' ? 'active' : ''}
-            onClick={() => setActiveTab('services')}
-          >
-            Services
-          </button>
-          <button
-            className={activeTab === 'clients' ? 'active' : ''}
-            onClick={() => setActiveTab('clients')}
-          >
-            Clients
-          </button>
-          <button
-            className={activeTab === 'rules' ? 'active' : ''}
-            onClick={() => setActiveTab('rules')}
-          >
-            Rules
-          </button>
-          <button
-            className={activeTab === 'endpoints' ? 'active' : ''}
-            onClick={() => setActiveTab('endpoints')}
-          >
-            Endpoints
-          </button>
-          <button
-            className={activeTab === 'notifications' ? 'active' : ''}
-            onClick={() => setActiveTab('notifications')}
-          >
-            Notifications
-          </button>
-          <button
-            className={activeTab === 'alerts' ? 'active' : ''}
-            onClick={() => setActiveTab('alerts')}
-          >
-            Alert Generator
-          </button>
+          {navGroups.map((group, groupIdx) => (
+            <div key={group.label} className="nav-group">
+              <span className="nav-group-label">{group.label}</span>
+              <div className="nav-group-buttons">
+                {group.tabs.map(tab => (
+                  <button
+                    key={tab.id}
+                    className={activeTab === tab.id ? 'active' : ''}
+                    onClick={() => setActiveTab(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              {groupIdx < navGroups.length - 1 && <div className="nav-divider" />}
+            </div>
+          ))}
         </div>
       </div>
 
-      {activeTab === 'metrics' && <Metrics />}
-      {activeTab === 'services' && <Services />}
+      {activeTab === 'dashboard' && <Metrics />}
+      {activeTab === 'metrics' && <Services />}
       {activeTab === 'clients' && <Clients />}
       {activeTab === 'rules' && <Rules />}
       {activeTab === 'endpoints' && <Endpoints />}
