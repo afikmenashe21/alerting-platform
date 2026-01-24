@@ -34,6 +34,7 @@ SERVICES=(
     "aggregator"
     "sender"
     "alert-producer"
+    "metrics-service"
 )
 
 echo -e "${GREEN}========================================${NC}"

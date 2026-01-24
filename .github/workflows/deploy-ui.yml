@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       api_gateway_url:
-        description: 'API Gateway HTTPS URL (e.g., https://xxx.execute-api.us-east-1.amazonaws.com)'
-        required: true
+        description: 'API Gateway HTTPS URL (leave empty to use default)'
+        required: false
+        default: 'https://7ezsleikw0.execute-api.us-east-1.amazonaws.com'
         type: string
 
 permissions:
@@ -39,8 +40,10 @@ jobs:
         working-directory: rule-service-ui
         env:
           VITE_BASE_PATH: /alerting-platform/
-          VITE_API_GATEWAY_URL: ${{ inputs.api_gateway_url }}
-        run: npm run build
+          VITE_API_GATEWAY_URL: ${{ inputs.api_gateway_url || 'https://7ezsleikw0.execute-api.us-east-1.amazonaws.com' }}
+        run: |
+          echo "Building with API Gateway URL: $VITE_API_GATEWAY_URL"
+          npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

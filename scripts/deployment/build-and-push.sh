@@ -60,6 +60,7 @@ SERVICES=(
     "aggregator"
     "sender"
     "alert-producer"
+    "metrics-service"
 )
 
 # Get image tag (default to latest, or use git commit hash)
