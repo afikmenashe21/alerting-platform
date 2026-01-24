@@ -39,6 +39,7 @@ echo_step() {
 # Services to run (in dependency order)
 SERVICES=(
     "rule-service"
+    "metrics-service"
     "rule-updater"
     "evaluator"
     "aggregator"

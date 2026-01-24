@@ -107,6 +107,15 @@ resource "aws_security_group" "ecs_instances" {
     description = "Allow public access to alert-producer API"
   }
 
+  # Allow public access to metrics-service API (port 8083)
+  ingress {
+    from_port   = 8083
+    to_port     = 8083
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow public access to metrics-service API"
+  }
+
   tags = {
     Name = "${var.project_name}-${var.environment}-ecs-instances"
   }
