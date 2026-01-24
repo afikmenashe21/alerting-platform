@@ -1,20 +1,26 @@
 // API base URLs - configurable for production deployment
-// In production: set VITE_API_GATEWAY_URL=https://xxx.execute-api.region.amazonaws.com
-// In development: uses Vite proxy (see vite.config.js)
+// 
+// For Direct EC2 Access (no API Gateway):
+//   VITE_API_GATEWAY_URL should be the EC2 public IP (e.g., http://34.201.202.8)
+//   The code will automatically use the correct ports for each service
 //
-// API Gateway routes:
-//   /api/*              -> rule-service (port 8081)
-//   /metrics-api/*      -> metrics-service (port 8083)
-//   /alert-producer-api/* -> alert-producer (port 8082)
+// For API Gateway:
+//   VITE_API_GATEWAY_URL should be the full gateway URL (e.g., https://xxx.execute-api.region.amazonaws.com)
+//
+// In development: uses Vite proxy (see vite.config.js)
 const API_GATEWAY_URL = import.meta.env.VITE_API_GATEWAY_URL || '';
 
+// Check if we're using direct EC2 access (IP address pattern)
+const isDirectEC2 = API_GATEWAY_URL && /^https?:\/\/\d+\.\d+\.\d+\.\d+$/.test(API_GATEWAY_URL);
+
+// Build URLs based on deployment type
 const API_BASE_URL = API_GATEWAY_URL
-  ? `${API_GATEWAY_URL}/api/v1`
+  ? (isDirectEC2 ? `${API_GATEWAY_URL}:8081/api/v1` : `${API_GATEWAY_URL}/api/v1`)
   : '/api/v1';
 
-// Metrics API base URL - routes through same API Gateway
+// Metrics API base URL
 const METRICS_API_BASE_URL = API_GATEWAY_URL
-  ? `${API_GATEWAY_URL}/metrics-api/api/v1`
+  ? (isDirectEC2 ? `${API_GATEWAY_URL}:8083/api/v1` : `${API_GATEWAY_URL}/metrics-api/api/v1`)
   : '/metrics-api/api/v1';
 
 async function handleResponse(response) {
@@ -326,11 +332,12 @@ export const serviceMetricsAPI = {
 // Alert Generator API (alert-producer)
 // ============================================================================
 
-// Alert producer URL - routed through API Gateway
-// In production: uses same VITE_API_GATEWAY_URL with /alert-producer-api prefix
+// Alert producer URL
+// In production (direct EC2): uses port 8082
+// In production (API Gateway): uses /alert-producer-api prefix
 // In development: uses Vite proxy (see vite.config.js)
 const ALERT_PRODUCER_API_BASE = API_GATEWAY_URL
-  ? `${API_GATEWAY_URL}/alert-producer-api/api/v1/alerts`
+  ? (isDirectEC2 ? `${API_GATEWAY_URL}:8082/api/v1/alerts` : `${API_GATEWAY_URL}/alert-producer-api/api/v1/alerts`)
   : '/alert-producer-api/api/v1/alerts';
 
 export const alertGeneratorAPI = {
