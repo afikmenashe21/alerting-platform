@@ -45,6 +45,8 @@ SERVICES=(
     "aggregator"
     "sender"
     "alert-producer"
+    "alert-producer-api"
+    "metrics-service"
 )
 
 STOPPED_COUNT=0
