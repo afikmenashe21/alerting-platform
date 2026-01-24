@@ -3,7 +3,6 @@ package database
 
 import (
 	"context"
-	"fmt"
 	"time"
 )
 
@@ -41,7 +40,11 @@ type HourlyCount struct {
 	Count int64  `json:"count"`
 }
 
+// queryTimeout is the maximum time for each database query
+const queryTimeout = 10 * time.Second
+
 // GetSystemMetrics aggregates metrics from all tables.
+// Uses a per-query timeout to prevent long-running queries from blocking.
 // Note: Requires idx_notifications_status and idx_notifications_created_at indexes for good performance.
 func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 	metrics := &SystemMetrics{
@@ -51,47 +54,57 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		CollectedAt:           time.Now().UTC(),
 	}
 
+	// Helper to create a context with query timeout
+	queryCtx := func() (context.Context, context.CancelFunc) {
+		return context.WithTimeout(ctx, queryTimeout)
+	}
+
 	// Get notification counts by status (uses idx_notifications_status)
+	// This query benefits from the status index
+	statusCtx, statusCancel := queryCtx()
+	defer statusCancel()
 	statusQuery := `
 		SELECT status, COUNT(*) as count
 		FROM notifications
 		GROUP BY status
 	`
-	rows, err := db.conn.QueryContext(ctx, statusQuery)
+	rows, err := db.conn.QueryContext(statusCtx, statusQuery)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query notification status: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var status string
-		var count int64
-		if err := rows.Scan(&status, &count); err != nil {
-			return nil, fmt.Errorf("failed to scan status count: %w", err)
+		// Don't fail completely - return partial data
+		metrics.NotificationsByStatus["error"] = -1
+	} else {
+		defer rows.Close()
+		for rows.Next() {
+			var status string
+			var count int64
+			if err := rows.Scan(&status, &count); err == nil {
+				metrics.NotificationsByStatus[status] = count
+				metrics.TotalNotifications += count
+			}
 		}
-		metrics.NotificationsByStatus[status] = count
-		metrics.TotalNotifications += count
 	}
 
 	// Get notifications in last 24 hours (uses idx_notifications_created_at)
+	last24hCtx, last24hCancel := queryCtx()
+	defer last24hCancel()
 	last24hQuery := `
 		SELECT COUNT(*) FROM notifications
 		WHERE created_at >= NOW() - INTERVAL '24 hours'
 	`
-	if err := db.conn.QueryRowContext(ctx, last24hQuery).Scan(&metrics.NotificationsLast24h); err != nil {
-		return nil, fmt.Errorf("failed to query last 24h notifications: %w", err)
-	}
+	_ = db.conn.QueryRowContext(last24hCtx, last24hQuery).Scan(&metrics.NotificationsLast24h)
 
 	// Get notifications in last hour (uses idx_notifications_created_at)
+	lastHourCtx, lastHourCancel := queryCtx()
+	defer lastHourCancel()
 	lastHourQuery := `
 		SELECT COUNT(*) FROM notifications
 		WHERE created_at >= NOW() - INTERVAL '1 hour'
 	`
-	if err := db.conn.QueryRowContext(ctx, lastHourQuery).Scan(&metrics.NotificationsLastHour); err != nil {
-		return nil, fmt.Errorf("failed to query last hour notifications: %w", err)
-	}
+	_ = db.conn.QueryRowContext(lastHourCtx, lastHourQuery).Scan(&metrics.NotificationsLastHour)
 
 	// Get hourly notification counts for last 24 hours (uses idx_notifications_created_at)
+	hourlyCtx, hourlyCancel := queryCtx()
+	defer hourlyCancel()
 	hourlyQuery := `
 		SELECT
 			date_trunc('hour', created_at) as hour,
@@ -101,25 +114,24 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		GROUP BY date_trunc('hour', created_at)
 		ORDER BY hour ASC
 	`
-	hourlyRows, err := db.conn.QueryContext(ctx, hourlyQuery)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query hourly notifications: %w", err)
-	}
-	defer hourlyRows.Close()
-
-	for hourlyRows.Next() {
-		var hour time.Time
-		var count int64
-		if err := hourlyRows.Scan(&hour, &count); err != nil {
-			return nil, fmt.Errorf("failed to scan hourly count: %w", err)
+	hourlyRows, err := db.conn.QueryContext(hourlyCtx, hourlyQuery)
+	if err == nil {
+		defer hourlyRows.Close()
+		for hourlyRows.Next() {
+			var hour time.Time
+			var count int64
+			if err := hourlyRows.Scan(&hour, &count); err == nil {
+				metrics.NotificationsByHour = append(metrics.NotificationsByHour, HourlyCount{
+					Hour:  hour.Format(time.RFC3339),
+					Count: count,
+				})
+			}
 		}
-		metrics.NotificationsByHour = append(metrics.NotificationsByHour, HourlyCount{
-			Hour:  hour.Format(time.RFC3339),
-			Count: count,
-		})
 	}
 
 	// Get rule counts
+	rulesCtx, rulesCancel := queryCtx()
+	defer rulesCancel()
 	rulesQuery := `
 		SELECT
 			COUNT(*) as total,
@@ -127,21 +139,21 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 			COUNT(*) FILTER (WHERE enabled = false) as disabled
 		FROM rules
 	`
-	if err := db.conn.QueryRowContext(ctx, rulesQuery).Scan(
+	_ = db.conn.QueryRowContext(rulesCtx, rulesQuery).Scan(
 		&metrics.TotalRules,
 		&metrics.EnabledRules,
 		&metrics.DisabledRules,
-	); err != nil {
-		return nil, fmt.Errorf("failed to query rules: %w", err)
-	}
+	)
 
 	// Get client count
+	clientsCtx, clientsCancel := queryCtx()
+	defer clientsCancel()
 	clientsQuery := `SELECT COUNT(*) FROM clients`
-	if err := db.conn.QueryRowContext(ctx, clientsQuery).Scan(&metrics.TotalClients); err != nil {
-		return nil, fmt.Errorf("failed to query clients: %w", err)
-	}
+	_ = db.conn.QueryRowContext(clientsCtx, clientsQuery).Scan(&metrics.TotalClients)
 
 	// Get endpoint counts by type
+	endpointsCtx, endpointsCancel := queryCtx()
+	defer endpointsCancel()
 	endpointsQuery := `
 		SELECT
 			type,
@@ -150,21 +162,18 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		FROM endpoints
 		GROUP BY type
 	`
-	endpointRows, err := db.conn.QueryContext(ctx, endpointsQuery)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query endpoints: %w", err)
-	}
-	defer endpointRows.Close()
-
-	for endpointRows.Next() {
-		var endpointType string
-		var count, enabledCount int64
-		if err := endpointRows.Scan(&endpointType, &count, &enabledCount); err != nil {
-			return nil, fmt.Errorf("failed to scan endpoint count: %w", err)
+	endpointRows, err := db.conn.QueryContext(endpointsCtx, endpointsQuery)
+	if err == nil {
+		defer endpointRows.Close()
+		for endpointRows.Next() {
+			var endpointType string
+			var count, enabledCount int64
+			if err := endpointRows.Scan(&endpointType, &count, &enabledCount); err == nil {
+				metrics.EndpointsByType[endpointType] = count
+				metrics.TotalEndpoints += count
+				metrics.EnabledEndpoints += enabledCount
+			}
 		}
-		metrics.EndpointsByType[endpointType] = count
-		metrics.TotalEndpoints += count
-		metrics.EnabledEndpoints += enabledCount
 	}
 
 	return metrics, nil
