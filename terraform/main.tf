@@ -153,6 +153,7 @@ module "rule_service" {
     HTTP_PORT          = "8081" # Explicitly set to match service code default
     KAFKA_BROKERS      = module.kafka.kafka_endpoint
     POSTGRES_DSN       = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
+    REDIS_ADDR         = module.redis.endpoint
     RULE_CHANGED_TOPIC = "rule.changed"
   }
 
@@ -249,6 +250,7 @@ module "aggregator" {
   environment_variables = {
     KAFKA_BROKERS             = module.kafka.kafka_endpoint
     POSTGRES_DSN              = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
+    REDIS_ADDR                = module.redis.endpoint
     ALERTS_MATCHED_TOPIC      = "alerts.matched"
     NOTIFICATIONS_READY_TOPIC = "notifications.ready"
     CONSUMER_GROUP_ID         = "aggregator-group"
