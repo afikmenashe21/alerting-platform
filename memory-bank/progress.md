@@ -104,6 +104,31 @@
 - [x] Added metrics-service to known service names in pkg/metrics
 - [x] All tests passing for both services
 
+## Performance Scaling & Load Testing (2026-01-24)
+- [x] **Notification Pagination**: Added limit/offset pagination to notifications API
+  - Updated `ListNotifications` handler with query params (limit, offset)
+  - Database returns `NotificationListResult` with total count
+  - UI updated with page size selector and navigation controls
+- [x] **Email Test Filtering**: Skip sending to test/dummy email domains
+  - Filter addresses like `@example.com`, `@test.com`, `@localhost`
+  - Prevents rate limit exhaustion on test data
+- [x] **Centralized Rate Limiting**: Token bucket rate limiter in email provider registry
+  - Configurable via `EMAIL_RATE_LIMIT` env var (default: 2 RPS)
+  - Applied at provider level, not per-worker
+- [x] **Kafka Partitions Increased**: Set `KAFKA_NUM_PARTITIONS=6` for auto-created topics
+  - Enables parallel consumption by multiple task instances
+  - Topics: alerts.new, alerts.matched, notifications.ready (6 partitions each)
+- [x] **Service Scaling**: Increased task counts for throughput
+  - Evaluator: 2 instances (up from 1)
+  - Aggregator: 2 instances (up from 1)
+  - Container memory: 150 MB (down from 180 MB to fit more tasks)
+- [x] **Load Test Results** (100,000 alerts):
+  - Producer: ~780 alerts/sec sustained
+  - Evaluator: ~320 RPS, 3.2ms latency, 0 errors
+  - Aggregator: ~100 RPS, 5ms latency, 0 errors
+  - Sender: ~120 RPS, 0 errors
+  - **Total: 100,000 alerts processed with 0 errors**
+
 ## Code health
 - [x] rule-service: comprehensive code cleanup and modularization:
   - Removed redundant code via private helpers (validation, HTTP, JSON parsing)

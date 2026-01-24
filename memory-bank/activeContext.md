@@ -200,6 +200,35 @@ Deployed free-tier infrastructure for rule-service-ui:
 2) ✅ Backend accessible via Elastic IP
 3) ✅ Sender service migrated from SMTP to AWS SES API (2026-01-23)
 4) ✅ Multi-provider email architecture implemented (2026-01-24)
+5) ✅ Performance scaling and load testing (2026-01-24)
+
+## Performance Scaling (2026-01-24)
+
+### Infrastructure Changes
+- **Kafka Partitions**: Increased to 6 partitions (via `KAFKA_NUM_PARTITIONS=6`)
+- **Evaluator**: Scaled to 2 instances
+- **Aggregator**: Scaled to 2 instances  
+- **Container Memory**: Reduced to 150 MB (from 180 MB) to fit more tasks
+
+### Load Test Results (100,000 alerts)
+| Component | Rate | Latency | Errors |
+|-----------|------|---------|--------|
+| Producer | 780/s | - | 0 |
+| Evaluator | 320/s | 3.2ms | 0 |
+| Aggregator | 100/s | 5.0ms | 0 |
+| Sender | 120/s | - | 0 |
+
+### System Limits (t3.small, ~$15-20/month)
+| Resource | Current | Limit | Bottleneck |
+|----------|---------|-------|------------|
+| EC2 Memory | 1938 MB | ~1900 MB used | Memory constraint |
+| Kafka | 1 broker | 6 partitions | Write throughput |
+| Pipeline | ~320/s | Single broker | Kafka broker |
+
+### To Scale Further (requires additional cost)
+1. **Larger EC2**: t3.medium/large for more memory (more tasks)
+2. **Multiple Kafka brokers**: For write parallelism
+3. **RDS upgrade**: For more database connections
 
 ## Multi-Provider Email System (2026-01-24)
 

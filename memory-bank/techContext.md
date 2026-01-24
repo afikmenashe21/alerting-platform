@@ -59,9 +59,28 @@
 - **Container Registry**: Amazon ECR
 - **Database**: RDS Postgres 15 (db.t3.micro free tier eligible)
 - **Cache**: ElastiCache Redis 7 (cache.t3.micro free tier eligible)
-- **Messaging**: Kafka on ECS (self-hosted, 9 partitions per topic)
-- **Load Balancer**: Application Load Balancer for public APIs
+- **Messaging**: Kafka on ECS (self-hosted, 6 partitions per topic)
+- **API Gateway**: AWS HTTP API for HTTPS endpoints
 - **Scaling**: Auto-scaling based on CPU/memory (1-3 instances per service)
 - **CI/CD**: GitHub Actions for automated deployments
 - **Monitoring**: CloudWatch Logs and Metrics
 - See `docs/deployment/PRODUCTION_DEPLOYMENT.md` for full guide
+
+### Current Configuration (Ultra-Low-Cost)
+- **EC2**: 1x t3.small (2 vCPU, 2GB RAM) - ~$15/month
+- **Container Memory**: 150 MB per service
+- **Kafka Partitions**: 6 per topic (via `KAFKA_NUM_PARTITIONS`)
+- **Task Counts**:
+  - Evaluator: 2 instances
+  - Aggregator: 2 instances
+  - Sender: 1 instance
+  - Others: 1 instance each
+
+### Performance Limits (current config)
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Producer | ~780/s | Kafka broker limit |
+| Evaluator | ~320/s | 2 instances |
+| Aggregator | ~100/s | 2 instances |
+| Sender | ~120/s | Rate limited |
+| Total Pipeline | ~320/s | Evaluator is bottleneck |
