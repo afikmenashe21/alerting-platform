@@ -89,11 +89,22 @@ func (db *DB) ListNotifications(ctx context.Context, clientID *string, status *s
 		}
 	}
 
-	// Get total count
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM notifications %s", whereClause)
+	// Get total count - use approximate count for unfiltered queries (instant for large tables)
 	var total int64
-	if err := db.conn.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, fmt.Errorf("failed to count notifications: %w", err)
+	if len(whereClauses) == 0 {
+		// Unfiltered: use pg_stat for instant approximate count
+		approxQuery := `SELECT n_live_tup FROM pg_stat_user_tables WHERE relname = 'notifications'`
+		if err := db.conn.QueryRowContext(ctx, approxQuery).Scan(&total); err != nil {
+			// Fallback to regular count if pg_stat fails
+			countQuery := "SELECT COUNT(*) FROM notifications"
+			_ = db.conn.QueryRowContext(ctx, countQuery).Scan(&total)
+		}
+	} else {
+		// Filtered: use exact count (filters reduce the scan significantly)
+		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM notifications %s", whereClause)
+		if err := db.conn.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+			return nil, fmt.Errorf("failed to count notifications: %w", err)
+		}
 	}
 
 	// Get paginated results

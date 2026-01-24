@@ -345,7 +345,7 @@ module "metrics_service" {
   container_image  = "${module.ecr.repository_urls["metrics-service"]}:${var.image_tag}"
   container_port   = 8083 # metrics-service listens on 8083
   container_cpu    = var.container_cpu
-  container_memory = var.container_memory
+  container_memory = 96 # Reduced - lightweight service (just DB queries)
 
   desired_count = 1
   max_count     = 1

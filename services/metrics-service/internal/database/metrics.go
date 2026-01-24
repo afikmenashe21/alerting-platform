@@ -41,7 +41,8 @@ type HourlyCount struct {
 }
 
 // queryTimeout is the maximum time for each database query
-const queryTimeout = 5 * time.Second
+// Reduced to 2 seconds to ensure fast API responses
+const queryTimeout = 2 * time.Second
 
 // GetSystemMetrics aggregates metrics from all tables.
 // Uses approximate counts from pg_stat for large tables to ensure fast response.
@@ -88,23 +89,36 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		}
 	}
 
-	// Get notification status breakdown - use a LIMIT to make it fast
-	// This gives recent distribution which is usually representative
+	// Get notification status breakdown from recent notifications (fast sampling)
+	// This gives a representative distribution without full table scan
 	statusCtx, statusCancel := queryCtx()
 	defer statusCancel()
+	// Sample last 1000 notifications for status distribution, then extrapolate
 	statusQuery := `
-		SELECT status, COUNT(*) as count
-		FROM (SELECT status FROM notifications ORDER BY created_at DESC LIMIT 10000) sub
-		GROUP BY status
+		WITH recent AS (
+			SELECT status FROM notifications 
+			ORDER BY created_at DESC 
+			LIMIT 1000
+		)
+		SELECT status, COUNT(*) as count FROM recent GROUP BY status
 	`
 	statusRows, err := db.conn.QueryContext(statusCtx, statusQuery)
 	if err == nil {
 		defer statusRows.Close()
+		var totalSampled int64
+		sampleCounts := make(map[string]int64)
 		for statusRows.Next() {
 			var status string
 			var count int64
 			if err := statusRows.Scan(&status, &count); err == nil {
-				metrics.NotificationsByStatus[status] = count
+				sampleCounts[status] = count
+				totalSampled += count
+			}
+		}
+		// Extrapolate to total notifications
+		if totalSampled > 0 && metrics.TotalNotifications > 0 {
+			for status, count := range sampleCounts {
+				metrics.NotificationsByStatus[status] = (count * metrics.TotalNotifications) / totalSampled
 			}
 		}
 	}
