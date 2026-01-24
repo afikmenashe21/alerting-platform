@@ -69,6 +69,7 @@ resource "aws_ecs_task_definition" "kafka_combined" {
         { name = "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", value = "1" },
         { name = "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", value = "1" },
         { name = "KAFKA_AUTO_CREATE_TOPICS_ENABLE", value = "true" },
+        { name = "KAFKA_NUM_PARTITIONS", value = "6" },
         { name = "KAFKA_HEAP_OPTS", value = "-Xmx256M -Xms128M" }
       ]
 
