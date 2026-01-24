@@ -21,164 +21,126 @@ func (jm *JobManager) RunJob(job *Job, kafkaBrokers string) {
 	go func() {
 		defer cancel()
 
-		// Convert request to config
 		cfg, err := job.Config.ToConfig(kafkaBrokers)
 		if err != nil {
-			job.UpdateStatus(JobStatusFailed)
-			job.SetError(err)
+			job.fail(err)
 			return
 		}
 
-		// Validate config (skip distribution validation for single_test mode)
-		// Note: This is a fallback validation - main validation happens in handlers
-		// For single_test, distributions aren't needed since it uses hardcoded test alert
-		if err := validateConfigForJob(&cfg, job.Config.SingleTest); err != nil {
-			job.UpdateStatus(JobStatusFailed)
-			job.SetError(err)
+		if err := validateConfig(&cfg, job.Config.SingleTest); err != nil {
+			job.fail(err)
 			return
 		}
 
-		// Initialize producer
-		var alertPublisher producer.AlertPublisher
-		if job.Config.Mock {
-			alertPublisher = producer.NewMock(cfg.Topic)
-			defer alertPublisher.Close()
-		} else {
-			kafkaProd, err2 := producer.New(cfg.KafkaBrokers, cfg.Topic)
-			if err2 != nil {
-				job.UpdateStatus(JobStatusFailed)
-				job.SetError(err2)
-				return
-			}
-			alertPublisher = kafkaProd
-			defer alertPublisher.Close()
+		alertPublisher, err := createPublisher(job.Config.Mock, cfg)
+		if err != nil {
+			job.fail(err)
+			return
 		}
+		defer alertPublisher.Close()
 
-		// Initialize generator
-		gen := generator.New(cfg)
-
-		// Initialize processor
-		proc := processor.NewProcessor(gen, alertPublisher, &cfg)
-
-		// Update status to running
 		job.UpdateStatus(JobStatusRunning)
-
-		// Run appropriate mode
-		var runErr error
-		
-		// Check if custom alert properties are specified (Severity, Source, or Name)
-		hasCustomAlert := job.Config.Severity != "" || job.Config.Source != "" || job.Config.Name != ""
-		
-		// Check if count is specified (for fixed number of alerts)
-		hasCount := job.Config.Count != nil && *job.Config.Count > 0
-		
-		if job.Config.SingleTest || (hasCustomAlert && hasCount && *job.Config.Count == 1) {
-			// Single alert mode - send exactly 1 custom alert
-			severity := job.Config.Severity
-			if severity == "" {
-				severity = "LOW" // Default
-			}
-			source := job.Config.Source
-			if source == "" {
-				source = "test-source" // Default
-			}
-			name := job.Config.Name
-			if name == "" {
-				name = "test-name" // Default
-			}
-			customAlert := generator.GenerateCustomAlert(severity, source, name)
-			runErr = alertPublisher.Publish(ctx, customAlert)
-			if runErr == nil {
-				job.IncrementAlertsSent()
-			}
-		} else if hasCustomAlert && hasCount {
-			// Multiple custom alerts with fixed count
-			severity := job.Config.Severity
-			if severity == "" {
-				severity = "LOW"
-			}
-			source := job.Config.Source
-			if source == "" {
-				source = "test-source"
-			}
-			name := job.Config.Name
-			if name == "" {
-				name = "test-name"
-			}
-			
-			count := *job.Config.Count
-			intervalMs := 0
-			if job.Config.IntervalMs != nil {
-				intervalMs = *job.Config.IntervalMs
-			}
-			
-			for i := 0; i < count && ctx.Err() == nil; i++ {
-				customAlert := generator.GenerateCustomAlert(severity, source, name)
-				if err := alertPublisher.Publish(ctx, customAlert); err != nil {
-					runErr = err
-					break
-				}
-				job.IncrementAlertsSent()
-				
-				// Wait interval between alerts (if specified and not last alert)
-				if intervalMs > 0 && i < count-1 {
-					select {
-					case <-ctx.Done():
-						runErr = ctx.Err()
-					case <-time.After(time.Duration(intervalMs) * time.Millisecond):
-					}
-				}
-			}
-		} else if job.Config.Test {
-			// Test mode - track progress in real-time
-			if cfg.BurstSize > 0 {
-				runErr = proc.ProcessTestBurstWithProgress(ctx, cfg.BurstSize, func(sent int) {
-					job.SetAlertsSent(int64(sent))
-				})
-			} else {
-				runErr = proc.ProcessTestContinuousWithProgress(ctx, cfg.RPS, cfg.Duration, func(sent int) {
-					job.SetAlertsSent(int64(sent))
-				})
-			}
-		} else if cfg.BurstSize > 0 {
-			// Burst mode - track progress in real-time
-			runErr = proc.ProcessBurstWithProgress(ctx, cfg.BurstSize, func(sent int) {
-				job.SetAlertsSent(int64(sent))
-			})
-		} else {
-			// Continuous mode - track progress in real-time
-			runErr = proc.ProcessContinuousWithProgress(ctx, cfg.RPS, cfg.Duration, func(sent int) {
-				job.SetAlertsSent(int64(sent))
-			})
-		}
-
-		if runErr != nil {
-			// Check if error is due to context cancellation
-			if errors.Is(runErr, context.Canceled) || ctx.Err() == context.Canceled {
-				// Job was cancelled - update status
-				job.UpdateStatus(JobStatusCancelled)
-				slog.Info("Job cancelled by user", "job_id", job.ID, "alerts_sent", job.GetAlertsSent())
-			} else {
-				job.UpdateStatus(JobStatusFailed)
-				job.SetError(runErr)
-			}
-			return
-		}
-
-		// Check if context was cancelled before marking as completed
-		select {
-		case <-ctx.Done():
-			job.UpdateStatus(JobStatusCancelled)
-			slog.Info("Job cancelled before completion", "job_id", job.ID, "alerts_sent", job.GetAlertsSent())
-		default:
-			job.UpdateStatus(JobStatusCompleted)
-		}
+		runErr := job.execute(ctx, alertPublisher, &cfg)
+		job.finalize(ctx, runErr)
 	}()
 }
 
-// validateConfigForJob validates configuration for job execution.
-// Skips distribution and RPS/duration validation when singleTest is true.
-// This is a wrapper around validateConfig for consistency.
-func validateConfigForJob(cfg *config.Config, singleTest bool) error {
-	return validateConfig(cfg, singleTest)
+// createPublisher initializes the appropriate alert publisher.
+func createPublisher(mock bool, cfg config.Config) (producer.AlertPublisher, error) {
+	if mock {
+		return producer.NewMock(cfg.Topic), nil
+	}
+	return producer.New(cfg.KafkaBrokers, cfg.Topic)
+}
+
+// execute runs the appropriate job mode.
+func (j *Job) execute(ctx context.Context, pub producer.AlertPublisher, cfg *config.Config) error {
+	// Single alert mode
+	if j.Config.SingleTest {
+		return j.sendCustomAlerts(ctx, pub, 1, 0)
+	}
+
+	// Custom alerts with count
+	hasCustom := j.Config.Severity != "" || j.Config.Source != "" || j.Config.Name != ""
+	if hasCustom && j.Config.Count != nil && *j.Config.Count > 0 {
+		interval := 0
+		if j.Config.IntervalMs != nil {
+			interval = *j.Config.IntervalMs
+		}
+		return j.sendCustomAlerts(ctx, pub, *j.Config.Count, interval)
+	}
+
+	// Standard modes via processor
+	gen := generator.New(*cfg)
+	proc := processor.NewProcessor(gen, pub, cfg)
+	progress := func(sent int) { j.SetAlertsSent(int64(sent)) }
+
+	if j.Config.Test {
+		if cfg.BurstSize > 0 {
+			return proc.ProcessTestBurstWithProgress(ctx, cfg.BurstSize, progress)
+		}
+		return proc.ProcessTestContinuousWithProgress(ctx, cfg.RPS, cfg.Duration, progress)
+	}
+
+	if cfg.BurstSize > 0 {
+		return proc.ProcessBurstWithProgress(ctx, cfg.BurstSize, progress)
+	}
+	return proc.ProcessContinuousWithProgress(ctx, cfg.RPS, cfg.Duration, progress)
+}
+
+// sendCustomAlerts sends a specified number of custom alerts.
+func (j *Job) sendCustomAlerts(ctx context.Context, pub producer.AlertPublisher, count, intervalMs int) error {
+	severity, source, name := j.Config.Severity, j.Config.Source, j.Config.Name
+	if severity == "" {
+		severity = "LOW"
+	}
+	if source == "" {
+		source = "test-source"
+	}
+	if name == "" {
+		name = "test-name"
+	}
+
+	for i := 0; i < count && ctx.Err() == nil; i++ {
+		if err := pub.Publish(ctx, generator.GenerateCustomAlert(severity, source, name)); err != nil {
+			return err
+		}
+		j.IncrementAlertsSent()
+
+		if intervalMs > 0 && i < count-1 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(intervalMs) * time.Millisecond):
+			}
+		}
+	}
+	return nil
+}
+
+// fail marks the job as failed with the given error.
+func (j *Job) fail(err error) {
+	j.UpdateStatus(JobStatusFailed)
+	j.SetError(err)
+}
+
+// finalize sets the final job status based on execution result.
+func (j *Job) finalize(ctx context.Context, err error) {
+	if err != nil {
+		if errors.Is(err, context.Canceled) || ctx.Err() == context.Canceled {
+			j.UpdateStatus(JobStatusCancelled)
+			slog.Info("Job cancelled", "job_id", j.ID, "alerts_sent", j.GetAlertsSent())
+		} else {
+			j.fail(err)
+		}
+		return
+	}
+
+	select {
+	case <-ctx.Done():
+		j.UpdateStatus(JobStatusCancelled)
+		slog.Info("Job cancelled", "job_id", j.ID, "alerts_sent", j.GetAlertsSent())
+	default:
+		j.UpdateStatus(JobStatusCompleted)
+	}
 }
