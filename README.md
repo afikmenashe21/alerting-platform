@@ -1,5 +1,7 @@
 # Alerting Platform
 
+[Live Playground (GitHub Pages)](https://afikmenashe21.github.io/alerting-platform/)
+
 A multi-service event-driven platform that evaluates incoming alerts against customer-defined rules and delivers notifications via email, Slack, and webhooks. Built with Go, Kafka, Postgres, and Redis.
 
 ## Purpose
