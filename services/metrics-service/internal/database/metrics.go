@@ -42,8 +42,8 @@ type HourlyCount struct {
 }
 
 // queryTimeout is the maximum time for each database query
-// Reduced to 2 seconds to ensure fast API responses
-const queryTimeout = 2 * time.Second
+// Set to 10 seconds to handle large tables (917k+ notifications)
+const queryTimeout = 10 * time.Second
 
 // GetSystemMetrics aggregates metrics from all tables.
 // Uses approximate counts from pg_stat for large tables and runs queries in parallel.
