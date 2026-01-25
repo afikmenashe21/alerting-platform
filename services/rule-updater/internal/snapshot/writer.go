@@ -8,8 +8,19 @@ import (
 	"log/slog"
 
 	"rule-updater/internal/database"
+
 	"github.com/redis/go-redis/v9"
 )
+
+// SnapshotWriter defines the interface for snapshot write operations.
+// This interface is implemented by Writer and can be used for testing.
+type SnapshotWriter interface {
+	WriteSnapshot(ctx context.Context, snapshot *Snapshot) error
+	AddRuleDirect(ctx context.Context, rule *database.Rule) error
+	RemoveRuleDirect(ctx context.Context, ruleID string) error
+	GetVersion(ctx context.Context) (int64, error)
+	LoadSnapshot(ctx context.Context) (*Snapshot, error)
+}
 
 // Writer handles building and writing snapshots to Redis.
 type Writer struct {

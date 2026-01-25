@@ -11,6 +11,13 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// RuleStore defines the interface for rule database operations.
+// This interface is implemented by DB and can be used for testing.
+type RuleStore interface {
+	GetRule(ctx context.Context, ruleID string) (*Rule, error)
+	GetAllEnabledRules(ctx context.Context) ([]*Rule, error)
+}
+
 // Rule represents a rule record in the database.
 type Rule struct {
 	RuleID    string
