@@ -211,7 +211,7 @@ module "evaluator" {
   container_memory = var.container_memory
 
   desired_count = 2 # Scaled for throughput (Kafka partitions allow parallel consumers)
-  max_count     = 3
+  max_count     = 2 # Limited to 2 to fit within t3.small memory
 
   environment_variables = {
     KAFKA_BROKERS         = module.kafka.kafka_endpoint
@@ -245,7 +245,7 @@ module "aggregator" {
   container_memory = var.container_memory
 
   desired_count = 2 # Scaled for throughput (Kafka partitions allow parallel consumers)
-  max_count     = 3
+  max_count     = 2 # Limited to 2 to fit within t3.small memory
 
   environment_variables = {
     KAFKA_BROKERS             = module.kafka.kafka_endpoint
@@ -292,7 +292,7 @@ module "sender" {
   container_memory = var.container_memory
 
   desired_count = 1 # Keep at 1 - email provider rate limiting is the bottleneck
-  max_count     = 2
+  max_count     = 1 # Limited to 1 to fit within t3.small memory
 
   environment_variables = {
     KAFKA_BROKERS             = module.kafka.kafka_endpoint
