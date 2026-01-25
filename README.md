@@ -10,29 +10,9 @@ Customers (tenants) define rules like: *"If alert has severity=HIGH and source=p
 
 The platform receives a stream of alerts, matches them against all active rules in real-time, deduplicates notifications, and delivers them reliably with at-least-once semantics.
 
+## Architecture
 ![Alerting Platform Architecture](docs/architecture/alerting-architecture.svg)
 
-## Architecture
-
-```
-                         ┌──────────────┐
-                         │ rule-service  │  CRUD API (rules, clients, endpoints)
-                         │   (HTTP)      │
-                         └──────┬───────┘
-                                │ rule.changed
-                                ▼
-┌──────────────┐       ┌──────────────┐       ┌──────────────┐
-│alert-producer│       │ rule-updater  │       │    Redis      │
-│  (source)    │       │              │──────▶│  (snapshot)   │
-└──────┬───────┘       └──────────────┘       └──────┬───────┘
-       │ alerts.new                                   │ warm start
-       ▼                                              ▼
-┌──────────────┐       ┌──────────────┐       ┌──────────────┐
-│  evaluator   │──────▶│  aggregator   │──────▶│    sender     │
-│ (rule match) │       │  (dedupe)     │       │ (deliver)     │
-└──────────────┘       └──────────────┘       └──────────────┘
-  alerts.matched         notifications.ready     Email/Slack/Webhook
-```
 
 ### Data Flow
 
