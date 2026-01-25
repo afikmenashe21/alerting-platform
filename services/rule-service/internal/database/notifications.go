@@ -89,13 +89,13 @@ func (db *DB) ListNotifications(ctx context.Context, clientID *string, status *s
 		}
 	}
 
-	// Get total count - use approximate count for unfiltered queries (instant for large tables)
+	// Get total count - use cached count for exact result with fast response
 	var total int64
 	if len(whereClauses) == 0 {
-		// Unfiltered: use pg_stat for instant approximate count
-		approxQuery := `SELECT n_live_tup FROM pg_stat_user_tables WHERE relname = 'notifications'`
-		if err := db.conn.QueryRowContext(ctx, approxQuery).Scan(&total); err != nil {
-			// Fallback to regular count if pg_stat fails
+		// Unfiltered: use counts cache for exact count (updated by triggers)
+		cacheQuery := `SELECT row_count FROM table_counts WHERE table_name = 'notifications'`
+		if err := db.conn.QueryRowContext(ctx, cacheQuery).Scan(&total); err != nil {
+			// Fallback to COUNT(*) if cache not available
 			countQuery := "SELECT COUNT(*) FROM notifications"
 			_ = db.conn.QueryRowContext(ctx, countQuery).Scan(&total)
 		}

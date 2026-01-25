@@ -65,11 +65,12 @@ func (db *DB) ListClients(ctx context.Context, limit, offset int) (*ClientListRe
 		offset = 0
 	}
 
-	// Get total count - use approximate count for instant response
+	// Get total count - use cached count for exact result with fast response
 	var total int64
-	approxQuery := `SELECT n_live_tup FROM pg_stat_user_tables WHERE relname = 'clients'`
-	if err := db.conn.QueryRowContext(ctx, approxQuery).Scan(&total); err != nil {
-		// Fallback to regular count if pg_stat fails
+	// Try counts cache first (exact count, updated by triggers)
+	cacheQuery := `SELECT row_count FROM table_counts WHERE table_name = 'clients'`
+	if err := db.conn.QueryRowContext(ctx, cacheQuery).Scan(&total); err != nil {
+		// Fallback to COUNT(*) if cache not available
 		if err := db.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM clients").Scan(&total); err != nil {
 			return nil, fmt.Errorf("failed to count clients: %w", err)
 		}

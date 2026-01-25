@@ -64,19 +64,16 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		return context.WithTimeout(ctx, queryTimeout)
 	}
 
-	// Query 1: Approximate row counts (fast, run first as other queries depend on it)
+	// Query 1: Exact row counts from cache table (fast, updated by triggers)
 	approxCtx, approxCancel := queryCtx()
-	approxQuery := `
-		SELECT relname, n_live_tup
-		FROM pg_stat_user_tables
-		WHERE relname IN ('notifications', 'rules', 'endpoints', 'clients')
-	`
-	approxRows, err := db.conn.QueryContext(approxCtx, approxQuery)
+	// Try counts cache first for exact counts
+	cacheQuery := `SELECT table_name, row_count FROM table_counts WHERE table_name IN ('notifications', 'rules', 'endpoints', 'clients')`
+	cacheRows, err := db.conn.QueryContext(approxCtx, cacheQuery)
 	if err == nil {
-		for approxRows.Next() {
+		for cacheRows.Next() {
 			var tableName string
 			var count int64
-			if err := approxRows.Scan(&tableName, &count); err == nil {
+			if err := cacheRows.Scan(&tableName, &count); err == nil {
 				switch tableName {
 				case "notifications":
 					metrics.TotalNotifications = count
@@ -89,7 +86,34 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 				}
 			}
 		}
-		approxRows.Close()
+		cacheRows.Close()
+	} else {
+		// Fallback to pg_stat if cache table doesn't exist
+		approxQuery := `
+			SELECT relname, n_live_tup
+			FROM pg_stat_user_tables
+			WHERE relname IN ('notifications', 'rules', 'endpoints', 'clients')
+		`
+		approxRows, err := db.conn.QueryContext(approxCtx, approxQuery)
+		if err == nil {
+			for approxRows.Next() {
+				var tableName string
+				var count int64
+				if err := approxRows.Scan(&tableName, &count); err == nil {
+					switch tableName {
+					case "notifications":
+						metrics.TotalNotifications = count
+					case "rules":
+						metrics.TotalRules = count
+					case "endpoints":
+						metrics.TotalEndpoints = count
+					case "clients":
+						metrics.TotalClients = count
+					}
+				}
+			}
+			approxRows.Close()
+		}
 	}
 	approxCancel()
 
