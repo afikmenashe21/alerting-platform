@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 
 	"rule-service/internal/events"
 )
@@ -106,23 +105,9 @@ func (h *Handlers) ListRules(w http.ResponseWriter, r *http.Request) {
 		clientIDPtr = &clientID
 	}
 
-	// Parse pagination parameters
-	limit := 50 // default
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
-		}
-	}
-
-	offset := 0 // default
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
-			offset = o
-		}
-	}
-
+	p := parsePagination(r)
 	ctx := r.Context()
-	result, err := h.db.ListRules(ctx, clientIDPtr, limit, offset)
+	result, err := h.db.ListRules(ctx, clientIDPtr, p.Limit, p.Offset)
 	if err != nil {
 		if handleDBError(w, err, "rule", "") {
 			return

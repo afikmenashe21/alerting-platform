@@ -4,7 +4,6 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
-	"strconv"
 )
 
 // GetNotification retrieves a notification by ID.
@@ -49,23 +48,9 @@ func (h *Handlers) ListNotifications(w http.ResponseWriter, r *http.Request) {
 		statusPtr = &status
 	}
 
-	// Parse pagination parameters
-	limit := 50 // default
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
-		}
-	}
-
-	offset := 0 // default
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
-			offset = o
-		}
-	}
-
+	p := parsePagination(r)
 	ctx := r.Context()
-	result, err := h.db.ListNotifications(ctx, clientIDPtr, statusPtr, limit, offset)
+	result, err := h.db.ListNotifications(ctx, clientIDPtr, statusPtr, p.Limit, p.Offset)
 	if err != nil {
 		slog.Error("Failed to list notifications", "error", err)
 		http.Error(w, "Failed to list notifications", http.StatusInternalServerError)

@@ -14,21 +14,68 @@ const (
 
 // Handlers wraps dependencies for HTTP handlers.
 type Handlers struct {
-	db               *database.DB
-	producer         *producer.Producer
-	metricsCollector *metrics.Collector
+	db       Repository
+	producer RulePublisher
+	metrics  MetricsRecorder
 }
 
-// NewHandlers creates a new handlers instance.
-func NewHandlers(db *database.DB, producer *producer.Producer, metricsCollector *metrics.Collector) *Handlers {
-	return &Handlers{
-		db:               db,
-		producer:         producer,
-		metricsCollector: metricsCollector,
+// Option is a functional option for configuring Handlers.
+type Option func(*Handlers)
+
+// WithMetrics sets a custom metrics recorder.
+func WithMetrics(m MetricsRecorder) Option {
+	return func(h *Handlers) {
+		if m != nil {
+			h.metrics = m
+		}
 	}
 }
 
-// GetMetricsCollector returns the metrics collector for middleware use.
+// NewHandlers creates a new handlers instance.
+// If metricsCollector is nil, a no-op implementation is used.
+func NewHandlers(db *database.DB, prod *producer.Producer, metricsCollector *metrics.Collector, opts ...Option) *Handlers {
+	h := &Handlers{
+		db:       db,
+		producer: prod,
+		metrics:  NoOpMetrics{}, // Default to no-op, never nil
+	}
+
+	// If a metrics collector was provided, wrap it
+	if metricsCollector != nil {
+		h.metrics = &metricsAdapter{collector: metricsCollector}
+	}
+
+	// Apply any additional options
+	for _, opt := range opts {
+		opt(h)
+	}
+
+	return h
+}
+
+// NewHandlersWithDeps creates handlers with explicit interface dependencies.
+// This constructor is primarily for testing.
+func NewHandlersWithDeps(db Repository, prod RulePublisher, m MetricsRecorder) *Handlers {
+	metrics := m
+	if metrics == nil {
+		metrics = NoOpMetrics{}
+	}
+	return &Handlers{
+		db:       db,
+		producer: prod,
+		metrics:  metrics,
+	}
+}
+
+// GetMetricsCollector returns a metrics.Collector for middleware use.
+// Returns nil if the underlying metrics is not a collector.
+// This method exists for backward compatibility with the router middleware.
 func (h *Handlers) GetMetricsCollector() *metrics.Collector {
-	return h.metricsCollector
+	// Check if the metrics adapter wraps a real collector
+	if adapter, ok := h.metrics.(*metricsAdapter); ok {
+		if collector, ok := adapter.collector.(*metrics.Collector); ok {
+			return collector
+		}
+	}
+	return nil
 }

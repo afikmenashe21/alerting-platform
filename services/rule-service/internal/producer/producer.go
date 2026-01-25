@@ -8,7 +8,6 @@ import (
 	"time"
 
 	kafkautil "github.com/afikmenashe/alerting-platform/pkg/kafka"
-	protocommon "github.com/afikmenashe/alerting-platform/pkg/proto/common"
 	protorules "github.com/afikmenashe/alerting-platform/pkg/proto/rules"
 	"rule-service/internal/events"
 	"github.com/segmentio/kafka-go"
@@ -66,20 +65,6 @@ func NewProducer(brokers string, topic string) (*Producer, error) {
 }
 
 
-func toProtoRuleAction(action string) protocommon.RuleAction {
-	switch action {
-	case events.ActionCreated:
-		return protocommon.RuleAction_RULE_ACTION_CREATED
-	case events.ActionUpdated:
-		return protocommon.RuleAction_RULE_ACTION_UPDATED
-	case events.ActionDeleted:
-		return protocommon.RuleAction_RULE_ACTION_DELETED
-	case events.ActionDisabled:
-		return protocommon.RuleAction_RULE_ACTION_DISABLED
-	default:
-		return protocommon.RuleAction_RULE_ACTION_UNSPECIFIED
-	}
-}
 
 // Publish serializes a rule changed event to protobuf and publishes it to Kafka.
 // The message is keyed by rule_id for partition distribution.
@@ -88,7 +73,7 @@ func (p *Producer) Publish(ctx context.Context, changed *events.RuleChanged) err
 	evt := &protorules.RuleChanged{
 		RuleId:        changed.RuleID,
 		ClientId:      changed.ClientID,
-		Action:        toProtoRuleAction(changed.Action),
+		Action:        events.ToProtoAction(changed.Action),
 		Version:       int32(changed.Version),
 		UpdatedAt:     changed.UpdatedAt,
 		SchemaVersion: int32(changed.SchemaVersion),

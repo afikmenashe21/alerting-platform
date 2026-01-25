@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 )
 
 // Keep validation logic centralized to avoid divergence across endpoints.
@@ -73,4 +74,33 @@ func requireQueryParam(w http.ResponseWriter, r *http.Request, paramName string)
 		return "", false
 	}
 	return value, true
+}
+
+// Pagination holds parsed pagination parameters.
+type Pagination struct {
+	Limit  int
+	Offset int
+}
+
+// DefaultPagination contains the default pagination values.
+var DefaultPagination = Pagination{Limit: 50, Offset: 0}
+
+// parsePagination extracts limit and offset from query parameters.
+// Uses defaults if not provided or invalid.
+func parsePagination(r *http.Request) Pagination {
+	p := DefaultPagination
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			p.Limit = l
+		}
+	}
+
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			p.Offset = o
+		}
+	}
+
+	return p
 }
