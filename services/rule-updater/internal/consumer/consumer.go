@@ -10,9 +10,18 @@ import (
 	protocommon "github.com/afikmenashe/alerting-platform/pkg/proto/common"
 	protorules "github.com/afikmenashe/alerting-platform/pkg/proto/rules"
 	"rule-updater/internal/events"
+
 	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )
+
+// MessageConsumer defines the interface for consuming rule change messages.
+// This interface is implemented by Consumer and can be used for testing.
+type MessageConsumer interface {
+	ReadMessage(ctx context.Context) (*events.RuleChanged, *kafka.Message, error)
+	CommitMessage(ctx context.Context, msg *kafka.Message) error
+	Close() error
+}
 
 // Consumer wraps a Kafka reader and provides a simple interface for consuming rule.changed events.
 type Consumer struct {
@@ -20,8 +29,8 @@ type Consumer struct {
 	topic  string
 }
 
-// fromProtoRuleAction converts a protobuf RuleAction enum to the simple action string.
-func fromProtoRuleAction(action protocommon.RuleAction) string {
+// fromProtoRuleAction converts a protobuf RuleAction enum to the typed Action.
+func fromProtoRuleAction(action protocommon.RuleAction) events.Action {
 	switch action {
 	case protocommon.RuleAction_RULE_ACTION_CREATED:
 		return events.ActionCreated
@@ -32,7 +41,7 @@ func fromProtoRuleAction(action protocommon.RuleAction) string {
 	case protocommon.RuleAction_RULE_ACTION_DISABLED:
 		return events.ActionDisabled
 	default:
-		return ""
+		return events.Action("")
 	}
 }
 

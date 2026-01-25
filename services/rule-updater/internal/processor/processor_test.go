@@ -2,149 +2,404 @@ package processor
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
-	"rule-updater/internal/consumer"
+	"rule-updater/internal/database"
 	"rule-updater/internal/events"
-	"rule-updater/internal/snapshot"
-	"github.com/redis/go-redis/v9"
 )
 
-func TestNewProcessor(t *testing.T) {
-	// Create real instances (will fail if Kafka/Redis not available, but that's OK for constructor test)
-	kafkaConsumer, err := consumer.NewConsumer("localhost:9092", "rule.changed", "test-group")
-	if err != nil {
-		t.Skipf("Skipping test: Kafka not available: %v", err)
-		return
-	}
-	defer kafkaConsumer.Close()
+func TestNew(t *testing.T) {
+	consumer := newFakeConsumer()
+	store := newFakeRuleStore()
+	writer := newFakeSnapshotWriter()
 
-	// Create a mock DB using sqlmock would be better, but for now we'll skip if DB not available
-	// For constructor test, we can use nil and just verify the struct is created
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
-	defer redisClient.Close()
+	p := New(consumer, store, writer)
 
-	ctx := context.Background()
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		t.Skipf("Skipping test: Redis not available: %v", err)
-		return
+	if p == nil {
+		t.Fatal("New() returned nil")
 	}
-
-	writer := snapshot.NewWriter(redisClient)
-
-	proc := NewProcessor(kafkaConsumer, nil, writer)
-	if proc == nil {
-		t.Fatal("NewProcessor() returned nil")
+	if p.consumer != consumer {
+		t.Error("New() consumer not set correctly")
 	}
-	if proc.consumer != kafkaConsumer {
-		t.Error("NewProcessor() consumer not set correctly")
+	if p.db != store {
+		t.Error("New() db not set correctly")
 	}
-	if proc.writer != writer {
-		t.Error("NewProcessor() writer not set correctly")
+	if p.writer != writer {
+		t.Error("New() writer not set correctly")
+	}
+	// Verify metrics defaults to no-op (not nil)
+	if p.metrics == nil {
+		t.Error("New() metrics should default to no-op, not nil")
 	}
 }
 
-func TestProcessor_ProcessRuleChanges_ContextCancellation(t *testing.T) {
-	kafkaConsumer, err := consumer.NewConsumer("localhost:9092", "rule.changed", "test-group-context")
-	if err != nil {
-		t.Skipf("Skipping test: Kafka not available: %v", err)
-		return
+func TestNew_WithMetrics(t *testing.T) {
+	consumer := newFakeConsumer()
+	store := newFakeRuleStore()
+	writer := newFakeSnapshotWriter()
+	metrics := newFakeMetrics()
+
+	p := New(consumer, store, writer, WithMetrics(metrics))
+
+	if p.metrics != metrics {
+		t.Error("WithMetrics() option not applied correctly")
 	}
-	defer kafkaConsumer.Close()
+}
 
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
-	defer redisClient.Close()
+func TestProcessRuleChanges_ContextCancellation(t *testing.T) {
+	consumer := newFakeConsumer()
+	store := newFakeRuleStore()
+	writer := newFakeSnapshotWriter()
 
-	ctx := context.Background()
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		t.Skipf("Skipping test: Redis not available: %v", err)
-		return
-	}
-
-	writer := snapshot.NewWriter(redisClient)
-	proc := NewProcessor(kafkaConsumer, nil, writer)
+	p := New(consumer, store, writer)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	err = proc.ProcessRuleChanges(ctx)
+	err := p.ProcessRuleChanges(ctx)
 	if err != nil {
 		t.Errorf("ProcessRuleChanges() error = %v, want nil", err)
 	}
 }
 
-// Note: Full ProcessRuleChanges tests require real Kafka/Redis/Postgres instances
-// The constructor test above validates that NewProcessor works correctly.
-// Integration tests would be needed for full coverage of ProcessRuleChanges.
+func TestApplyRuleChange_Created(t *testing.T) {
+	store := newFakeRuleStore()
+	writer := newFakeSnapshotWriter()
+	metrics := newFakeMetrics()
 
+	rule := &database.Rule{
+		RuleID:   "rule-1",
+		ClientID: "client-1",
+		Severity: "critical",
+		Source:   "test-source",
+		Name:     "test-rule",
+		Enabled:  true,
+	}
+	store.AddRule(rule)
 
-func TestProcessor_applyRuleChange_AllActions(t *testing.T) {
-	// This test requires real DB and Redis instances
-	// For unit testing applyRuleChange, we would need to refactor to use interfaces
-	// For now, we test the logic indirectly through integration tests
-	
-	// Test that applyRuleChange handles all known actions
-	// This is tested indirectly through ProcessRuleChanges in integration tests
-	// The method is private, so we can't test it directly without being in the same package
-	// Since we are in the same package, we can test it, but it requires real dependencies
-	
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+	p := New(nil, store, writer, WithMetrics(metrics))
+
+	ruleChanged := &events.RuleChanged{
+		RuleID:   "rule-1",
+		ClientID: "client-1",
+		Action:   events.ActionCreated,
+		Version:  1,
+	}
+
+	err := p.applyRuleChange(context.Background(), ruleChanged)
+	if err != nil {
+		t.Errorf("applyRuleChange() error = %v, want nil", err)
+	}
+
+	if len(writer.addedRules) != 1 {
+		t.Errorf("expected 1 added rule, got %d", len(writer.addedRules))
+	}
+	if writer.addedRules[0].RuleID != "rule-1" {
+		t.Errorf("expected rule-1, got %s", writer.addedRules[0].RuleID)
+	}
+}
+
+func TestApplyRuleChange_Updated(t *testing.T) {
+	store := newFakeRuleStore()
+	writer := newFakeSnapshotWriter()
+
+	rule := &database.Rule{
+		RuleID:   "rule-2",
+		ClientID: "client-1",
+		Severity: "warning",
+		Source:   "test-source",
+		Name:     "updated-rule",
+		Enabled:  true,
+	}
+	store.AddRule(rule)
+
+	p := New(nil, store, writer)
+
+	ruleChanged := &events.RuleChanged{
+		RuleID:   "rule-2",
+		ClientID: "client-1",
+		Action:   events.ActionUpdated,
+		Version:  2,
+	}
+
+	err := p.applyRuleChange(context.Background(), ruleChanged)
+	if err != nil {
+		t.Errorf("applyRuleChange() error = %v, want nil", err)
+	}
+
+	if len(writer.addedRules) != 1 {
+		t.Errorf("expected 1 added rule, got %d", len(writer.addedRules))
+	}
+}
+
+func TestApplyRuleChange_Deleted(t *testing.T) {
+	writer := newFakeSnapshotWriter()
+
+	p := New(nil, nil, writer)
+
+	ruleChanged := &events.RuleChanged{
+		RuleID:   "rule-3",
+		ClientID: "client-1",
+		Action:   events.ActionDeleted,
+		Version:  1,
+	}
+
+	err := p.applyRuleChange(context.Background(), ruleChanged)
+	if err != nil {
+		t.Errorf("applyRuleChange() error = %v, want nil", err)
+	}
+
+	if len(writer.removedRules) != 1 {
+		t.Errorf("expected 1 removed rule, got %d", len(writer.removedRules))
+	}
+	if writer.removedRules[0] != "rule-3" {
+		t.Errorf("expected rule-3, got %s", writer.removedRules[0])
+	}
+}
+
+func TestApplyRuleChange_Disabled(t *testing.T) {
+	writer := newFakeSnapshotWriter()
+
+	p := New(nil, nil, writer)
+
+	ruleChanged := &events.RuleChanged{
+		RuleID:   "rule-4",
+		ClientID: "client-1",
+		Action:   events.ActionDisabled,
+		Version:  1,
+	}
+
+	err := p.applyRuleChange(context.Background(), ruleChanged)
+	if err != nil {
+		t.Errorf("applyRuleChange() error = %v, want nil", err)
+	}
+
+	if len(writer.removedRules) != 1 {
+		t.Errorf("expected 1 removed rule, got %d", len(writer.removedRules))
+	}
+}
+
+func TestApplyRuleChange_UnknownAction(t *testing.T) {
+	p := New(nil, nil, nil)
+
+	ruleChanged := &events.RuleChanged{
+		RuleID:   "rule-5",
+		ClientID: "client-1",
+		Action:   events.Action("UNKNOWN"),
+		Version:  1,
+	}
+
+	err := p.applyRuleChange(context.Background(), ruleChanged)
+	if err == nil {
+		t.Error("applyRuleChange() with unknown action expected error, got nil")
+	}
+}
+
+func TestApplyRuleChange_EmptyRuleID(t *testing.T) {
+	p := New(nil, nil, nil)
+
+	ruleChanged := &events.RuleChanged{
+		RuleID:   "",
+		ClientID: "client-1",
+		Action:   events.ActionCreated,
+		Version:  1,
+	}
+
+	err := p.applyRuleChange(context.Background(), ruleChanged)
+	if err == nil {
+		t.Error("applyRuleChange() with empty rule_id expected error, got nil")
+	}
+}
+
+func TestApplyRuleChange_DBError(t *testing.T) {
+	store := newFakeRuleStore()
+	store.SetGetError(errors.New("db connection failed"))
+	writer := newFakeSnapshotWriter()
+
+	p := New(nil, store, writer)
+
+	ruleChanged := &events.RuleChanged{
+		RuleID:   "rule-6",
+		ClientID: "client-1",
+		Action:   events.ActionCreated,
+		Version:  1,
+	}
+
+	err := p.applyRuleChange(context.Background(), ruleChanged)
+	if err == nil {
+		t.Error("applyRuleChange() with DB error expected error, got nil")
+	}
+}
+
+func TestApplyRuleChange_WriterError(t *testing.T) {
+	store := newFakeRuleStore()
+	store.AddRule(&database.Rule{
+		RuleID:   "rule-7",
+		ClientID: "client-1",
+		Enabled:  true,
 	})
-	defer redisClient.Close()
+	writer := newFakeSnapshotWriter()
+	writer.SetAddError(errors.New("redis connection failed"))
 
-	ctx := context.Background()
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		t.Skipf("Skipping test: Redis not available: %v", err)
-		return
+	p := New(nil, store, writer)
+
+	ruleChanged := &events.RuleChanged{
+		RuleID:   "rule-7",
+		ClientID: "client-1",
+		Action:   events.ActionCreated,
+		Version:  1,
 	}
 
-	writer := snapshot.NewWriter(redisClient)
-	
-	// Create a mock DB - we'll use sqlmock for this
-	// For now, we'll skip if we can't create a proper mock
-	// In a real scenario, we'd use sqlmock to create a mock DB
-	
-	// Test applyRuleChange with all actions
-	// Note: This requires a real database connection or sqlmock
-	// For now, we verify the method exists and can be called
-	proc := &Processor{
-		consumer: nil,
-		db:       nil,
-		writer:   writer,
+	err := p.applyRuleChange(context.Background(), ruleChanged)
+	if err == nil {
+		t.Error("applyRuleChange() with writer error expected error, got nil")
+	}
+}
+
+func TestProcessOneMessage_Success(t *testing.T) {
+	consumer := newFakeConsumer()
+	store := newFakeRuleStore()
+	writer := newFakeSnapshotWriter()
+	metrics := newFakeMetrics()
+
+	rule := &database.Rule{
+		RuleID:   "rule-8",
+		ClientID: "client-1",
+		Severity: "info",
+		Source:   "test",
+		Name:     "test-rule",
+		Enabled:  true,
+	}
+	store.AddRule(rule)
+
+	consumer.AddMessage(&events.RuleChanged{
+		RuleID:   "rule-8",
+		ClientID: "client-1",
+		Action:   events.ActionCreated,
+		Version:  1,
+	})
+
+	p := New(consumer, store, writer, WithMetrics(metrics))
+
+	err := p.processOneMessage(context.Background())
+	if err != nil {
+		t.Errorf("processOneMessage() error = %v, want nil", err)
 	}
 
-	actions := []string{
-		events.ActionCreated,
-		events.ActionUpdated,
-		events.ActionDeleted,
-		events.ActionDisabled,
-		"UNKNOWN",
+	// Verify metrics were recorded
+	if metrics.receivedCalls != 1 {
+		t.Errorf("expected 1 RecordReceived call, got %d", metrics.receivedCalls)
+	}
+	if metrics.processedCalls != 1 {
+		t.Errorf("expected 1 RecordProcessed call, got %d", metrics.processedCalls)
+	}
+	if metrics.publishedCalls != 1 {
+		t.Errorf("expected 1 RecordPublished call, got %d", metrics.publishedCalls)
+	}
+	if metrics.customCalls["rules_CREATED"] != 1 {
+		t.Errorf("expected 1 rules_CREATED metric, got %d", metrics.customCalls["rules_CREATED"])
 	}
 
-	for _, action := range actions {
-		t.Run(action, func(t *testing.T) {
-			ruleChanged := &events.RuleChanged{
-				RuleID:        "rule-1",
-				ClientID:      "client-1",
-				Action:        action,
-				Version:       1,
-				UpdatedAt:     time.Now().Unix(),
-				SchemaVersion: 1,
+	// Verify commit was called
+	if consumer.commitCalls != 1 {
+		t.Errorf("expected 1 commit call, got %d", consumer.commitCalls)
+	}
+}
+
+func TestProcessOneMessage_ApplyError(t *testing.T) {
+	consumer := newFakeConsumer()
+	writer := newFakeSnapshotWriter()
+	metrics := newFakeMetrics()
+
+	consumer.AddMessage(&events.RuleChanged{
+		RuleID:   "rule-9",
+		ClientID: "client-1",
+		Action:   events.ActionCreated, // Will fail - no DB configured
+		Version:  1,
+	})
+
+	// No DB configured - will fail on CREATED action
+	p := New(consumer, nil, writer, WithMetrics(metrics))
+
+	err := p.processOneMessage(context.Background())
+	if err == nil {
+		t.Error("processOneMessage() expected error, got nil")
+	}
+
+	// Verify error metric was recorded
+	if metrics.errorCalls != 1 {
+		t.Errorf("expected 1 RecordError call, got %d", metrics.errorCalls)
+	}
+
+	// Verify commit was NOT called (message not committed on error)
+	if consumer.commitCalls != 0 {
+		t.Errorf("expected 0 commit calls on error, got %d", consumer.commitCalls)
+	}
+}
+
+func TestProcessOneMessage_ReadError(t *testing.T) {
+	consumer := newFakeConsumer()
+	consumer.SetReadError(errors.New("kafka read failed"))
+
+	p := New(consumer, nil, nil)
+
+	err := p.processOneMessage(context.Background())
+	if err == nil {
+		t.Error("processOneMessage() with read error expected error, got nil")
+	}
+}
+
+func TestNoopMetrics(t *testing.T) {
+	m := NoopMetrics()
+
+	// These should not panic
+	m.RecordReceived()
+	m.RecordProcessed(time.Second)
+	m.RecordPublished()
+	m.RecordError()
+	m.IncrementCustom("test")
+}
+
+func TestAction_IsAdditive(t *testing.T) {
+	tests := []struct {
+		action   events.Action
+		expected bool
+	}{
+		{events.ActionCreated, true},
+		{events.ActionUpdated, true},
+		{events.ActionDeleted, false},
+		{events.ActionDisabled, false},
+		{events.Action("UNKNOWN"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.action), func(t *testing.T) {
+			if got := tt.action.IsAdditive(); got != tt.expected {
+				t.Errorf("Action(%s).IsAdditive() = %v, want %v", tt.action, got, tt.expected)
 			}
+		})
+	}
+}
 
-			// This will fail for CREATED/UPDATED without a DB, and for DELETED/DISABLED without the rule in Redis
-			// But it tests the switch statement logic
-			err := proc.applyRuleChange(ctx, ruleChanged)
-			if action == "UNKNOWN" && err == nil {
-				t.Error("applyRuleChange() with unknown action expected error, got nil")
+func TestAction_IsRemoval(t *testing.T) {
+	tests := []struct {
+		action   events.Action
+		expected bool
+	}{
+		{events.ActionCreated, false},
+		{events.ActionUpdated, false},
+		{events.ActionDeleted, true},
+		{events.ActionDisabled, true},
+		{events.Action("UNKNOWN"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.action), func(t *testing.T) {
+			if got := tt.action.IsRemoval(); got != tt.expected {
+				t.Errorf("Action(%s).IsRemoval() = %v, want %v", tt.action, got, tt.expected)
 			}
-			// Other errors are expected without proper setup
 		})
 	}
 }
