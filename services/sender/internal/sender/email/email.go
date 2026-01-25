@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 
 	"sender/internal/database"
@@ -24,7 +23,7 @@ type Sender struct {
 // The provider is selected based on EMAIL_PROVIDER env var (default: auto-detect)
 // Priority: resend > ses (based on configuration availability)
 func NewSender() *Sender {
-	from := getEnvOrDefault("EMAIL_FROM", getEnvOrDefault("SES_FROM", "alerts@alerting-platform.local"))
+	from := provider.GetEnvOrDefault("EMAIL_FROM", provider.GetEnvOrDefault("SES_FROM", "alerts@alerting-platform.local"))
 
 	// Create provider registry
 	registry := provider.NewRegistry()
@@ -34,7 +33,7 @@ func NewSender() *Sender {
 	registry.Register(provider.NewResendProvider())
 
 	// Set provider priority based on EMAIL_PROVIDER env var
-	primaryProvider := getEnvOrDefault("EMAIL_PROVIDER", "")
+	primaryProvider := provider.GetEnvOrDefault("EMAIL_PROVIDER", "")
 
 	if primaryProvider != "" {
 		// Explicit provider selection
@@ -68,13 +67,6 @@ func NewSender() *Sender {
 		registry: registry,
 		from:     from,
 	}
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return defaultValue
 }
 
 // Type returns the endpoint type this sender handles.

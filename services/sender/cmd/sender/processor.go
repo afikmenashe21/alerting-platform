@@ -11,21 +11,37 @@ import (
 	"sender/internal/consumer"
 	"sender/internal/database"
 	"sender/internal/events"
+	"sender/internal/metrics"
 	"sender/internal/sender"
-
-	"github.com/afikmenashe/alerting-platform/pkg/metrics"
 )
 
 const workerCount = 10
 
+// work represents a unit of work for the worker pool.
+type work struct {
+	ready *events.NotificationReady
+	msg   *kafka.Message
+}
+
+// processorDeps holds all dependencies needed for notification processing.
+// This makes testing and dependency injection cleaner.
+type processorDeps struct {
+	consumer *consumer.Consumer
+	db       *database.DB
+	sender   *sender.Sender
+	metrics  metrics.Recorder
+}
+
 // processNotifications reads notification ready events from Kafka and processes them concurrently.
 // Rate limiting for email providers is handled at the email sender level.
-func processNotifications(ctx context.Context, kafkaConsumer *consumer.Consumer, db *database.DB, notifSender *sender.Sender, m *metrics.Collector) error {
+func processNotifications(ctx context.Context, kafkaConsumer *consumer.Consumer, db *database.DB, notifSender *sender.Sender, m metrics.Recorder) error {
 	slog.Info("Starting notification processing loop", "workers", workerCount)
 
-	type work struct {
-		ready *events.NotificationReady
-		msg   *kafka.Message
+	deps := &processorDeps{
+		consumer: kafkaConsumer,
+		db:       db,
+		sender:   notifSender,
+		metrics:  m,
 	}
 
 	jobs := make(chan work, workerCount*2)
@@ -34,127 +50,139 @@ func processNotifications(ctx context.Context, kafkaConsumer *consumer.Consumer,
 	// Start worker goroutines
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for job := range jobs {
-				processOne(ctx, db, notifSender, kafkaConsumer, job.ready, job.msg, m)
-			}
-		}()
+		go runWorker(ctx, deps, jobs, &wg)
 	}
 
 	// Read messages and dispatch to workers
+	dispatchMessages(ctx, deps, jobs)
+
+	close(jobs)
+	wg.Wait()
+	slog.Info("Notification processing loop stopped")
+	return nil
+}
+
+// runWorker processes jobs from the channel until it's closed.
+func runWorker(ctx context.Context, deps *processorDeps, jobs <-chan work, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for job := range jobs {
+		processOne(ctx, deps, job.ready, job.msg)
+	}
+}
+
+// dispatchMessages reads messages from Kafka and dispatches them to workers.
+func dispatchMessages(ctx context.Context, deps *processorDeps, jobs chan<- work) {
 	for {
 		select {
 		case <-ctx.Done():
-			close(jobs)
-			wg.Wait()
-			slog.Info("Notification processing loop stopped")
-			return nil
+			return
 		default:
-			ready, msg, err := kafkaConsumer.ReadMessage(ctx)
+			ready, msg, err := deps.consumer.ReadMessage(ctx)
 			if err != nil {
 				if ctx.Err() != nil {
-					close(jobs)
-					wg.Wait()
-					return nil
+					return
 				}
 				slog.Error("Failed to read notification ready event", "error", err)
 				continue
 			}
-			if m != nil {
-				m.RecordReceived()
-			}
+			deps.metrics.RecordReceived()
 			jobs <- work{ready: ready, msg: msg}
 		}
 	}
 }
 
 // processOne handles a single notification: fetch, send, update status, commit.
-func processOne(ctx context.Context, db *database.DB, notifSender *sender.Sender, kafkaConsumer *consumer.Consumer, ready *events.NotificationReady, msg *kafka.Message, m *metrics.Collector) {
+func processOne(ctx context.Context, deps *processorDeps, ready *events.NotificationReady, msg *kafka.Message) {
 	startTime := time.Now()
 
-	notification, err := db.GetNotification(ctx, ready.NotificationID)
+	// Fetch notification from database
+	notification, err := deps.db.GetNotification(ctx, ready.NotificationID)
 	if err != nil {
-		slog.Error("Failed to fetch notification", "notification_id", ready.NotificationID, "error", err)
-		if m != nil {
-			m.RecordError()
-		}
+		logAndRecordError(deps.metrics, "Failed to fetch notification",
+			"notification_id", ready.NotificationID, "error", err)
 		return
 	}
 
 	// Skip if already processed (idempotency check)
-	if notification.Status == "SENT" || notification.Status == "FAILED" {
-		slog.Debug("Notification already processed, skipping",
-			"notification_id", ready.NotificationID,
-			"status", notification.Status,
-		)
-		if m != nil {
-			m.IncrementCustom("notifications_skipped")
-		}
-		if err := kafkaConsumer.CommitMessage(ctx, msg); err != nil {
-			slog.Error("Failed to commit offset", "error", err)
-		}
+	if isAlreadyProcessed(notification.Status) {
+		handleAlreadyProcessed(ctx, deps, ready, msg)
 		return
 	}
 
-	endpoints, err := db.GetEndpointsByRuleIDs(ctx, notification.RuleIDs)
+	// Fetch endpoints for the notification's rules
+	endpoints, err := deps.db.GetEndpointsByRuleIDs(ctx, notification.RuleIDs)
 	if err != nil {
-		slog.Error("Failed to fetch endpoints", "notification_id", ready.NotificationID, "error", err)
-		if m != nil {
-			m.RecordError()
-		}
+		logAndRecordError(deps.metrics, "Failed to fetch endpoints",
+			"notification_id", ready.NotificationID, "error", err)
 		return
 	}
 
-	if err := notifSender.SendNotification(ctx, notification, endpoints); err != nil {
-		slog.Error("Failed to send notification", "notification_id", ready.NotificationID, "error", err)
-
-		// Mark as FAILED (dead letter queue pattern - notification can be retried later)
-		if updateErr := db.UpdateNotificationStatus(ctx, ready.NotificationID, "FAILED"); updateErr != nil {
-			slog.Error("Failed to mark notification as failed",
-				"notification_id", ready.NotificationID,
-				"error", updateErr,
-			)
-			if m != nil {
-				m.RecordError()
-			}
-			// Don't commit - will retry on redelivery
-			return
-		}
-
-		if m != nil {
-			m.RecordProcessed(time.Since(startTime)) // Record latency even for failures
-			m.RecordError()
-			m.IncrementCustom("notifications_failed")
-		}
-
-		slog.Warn("Notification marked as FAILED (DLQ)",
-			"notification_id", ready.NotificationID,
-			"alert_id", ready.AlertID,
-			"client_id", ready.ClientID,
-			"error", err,
-		)
-
-		// Commit offset - we've handled this notification (by marking it failed)
-		if err := kafkaConsumer.CommitMessage(ctx, msg); err != nil {
-			slog.Error("Failed to commit offset", "error", err)
-		}
+	// Attempt to send the notification
+	if err := deps.sender.SendNotification(ctx, notification, endpoints); err != nil {
+		handleSendFailure(ctx, deps, ready, notification, msg, startTime, err)
 		return
 	}
 
-	if err := db.UpdateNotificationStatus(ctx, ready.NotificationID, "SENT"); err != nil {
-		slog.Error("Failed to update notification status", "notification_id", ready.NotificationID, "error", err)
-		if m != nil {
-			m.RecordError()
-		}
+	// Update status to SENT and commit
+	handleSendSuccess(ctx, deps, ready, notification, msg, startTime)
+}
+
+// isAlreadyProcessed checks if a notification has already been processed.
+func isAlreadyProcessed(status string) bool {
+	return database.NotificationStatus(status).IsTerminal()
+}
+
+// handleAlreadyProcessed handles the case where notification was already processed.
+func handleAlreadyProcessed(ctx context.Context, deps *processorDeps, ready *events.NotificationReady, msg *kafka.Message) {
+	slog.Debug("Notification already processed, skipping",
+		"notification_id", ready.NotificationID,
+		"status", "already_processed",
+	)
+	deps.metrics.RecordSkipped()
+	commitOffset(ctx, deps.consumer, msg)
+}
+
+// handleSendFailure handles the case where sending a notification failed.
+func handleSendFailure(ctx context.Context, deps *processorDeps, ready *events.NotificationReady, notification *database.Notification, msg *kafka.Message, startTime time.Time, sendErr error) {
+	slog.Error("Failed to send notification",
+		"notification_id", ready.NotificationID,
+		"error", sendErr,
+	)
+
+	// Mark as FAILED (dead letter queue pattern - notification can be retried later)
+	if err := deps.db.UpdateNotificationStatus(ctx, ready.NotificationID, database.StatusFailed.String()); err != nil {
+		logAndRecordError(deps.metrics, "Failed to mark notification as failed",
+			"notification_id", ready.NotificationID, "error", err)
+		// Don't commit - will retry on redelivery
 		return
 	}
 
-	if m != nil {
-		m.RecordProcessed(time.Since(startTime))
-		m.RecordPublished() // Count as "published" when successfully sent
-		m.IncrementCustom("notifications_sent")
+	deps.metrics.RecordProcessed(time.Since(startTime))
+	deps.metrics.RecordError()
+	deps.metrics.RecordFailed()
+
+	slog.Warn("Notification marked as FAILED (DLQ)",
+		"notification_id", ready.NotificationID,
+		"alert_id", ready.AlertID,
+		"client_id", ready.ClientID,
+		"error", sendErr,
+	)
+
+	// Commit offset - we've handled this notification (by marking it failed)
+	commitOffset(ctx, deps.consumer, msg)
+}
+
+// handleSendSuccess handles the case where sending a notification succeeded.
+func handleSendSuccess(ctx context.Context, deps *processorDeps, ready *events.NotificationReady, notification *database.Notification, msg *kafka.Message, startTime time.Time) {
+	if err := deps.db.UpdateNotificationStatus(ctx, ready.NotificationID, database.StatusSent.String()); err != nil {
+		logAndRecordError(deps.metrics, "Failed to update notification status",
+			"notification_id", ready.NotificationID, "error", err)
+		return
 	}
+
+	deps.metrics.RecordProcessed(time.Since(startTime))
+	deps.metrics.RecordPublished()
+	deps.metrics.RecordSent()
 
 	slog.Info("Successfully sent notification",
 		"notification_id", ready.NotificationID,
@@ -163,7 +191,18 @@ func processOne(ctx context.Context, db *database.DB, notifSender *sender.Sender
 		"rule_ids", notification.RuleIDs,
 	)
 
-	if err := kafkaConsumer.CommitMessage(ctx, msg); err != nil {
-		slog.Error("Failed to commit offset", "notification_id", ready.NotificationID, "error", err)
+	commitOffset(ctx, deps.consumer, msg)
+}
+
+// commitOffset commits the Kafka offset for the given message.
+func commitOffset(ctx context.Context, c *consumer.Consumer, msg *kafka.Message) {
+	if err := c.CommitMessage(ctx, msg); err != nil {
+		slog.Error("Failed to commit offset", "error", err)
 	}
+}
+
+// logAndRecordError logs an error and records it in metrics.
+func logAndRecordError(m metrics.Recorder, msg string, args ...any) {
+	slog.Error(msg, args...)
+	m.RecordError()
 }

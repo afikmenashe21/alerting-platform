@@ -12,6 +12,26 @@ import (
 	"github.com/lib/pq"
 )
 
+// NotificationStatus represents the status of a notification.
+type NotificationStatus string
+
+// Notification status constants.
+const (
+	StatusPending NotificationStatus = "PENDING"
+	StatusSent    NotificationStatus = "SENT"
+	StatusFailed  NotificationStatus = "FAILED"
+)
+
+// String returns the string representation of the status.
+func (s NotificationStatus) String() string {
+	return string(s)
+}
+
+// IsTerminal returns true if the status is a terminal state (SENT or FAILED).
+func (s NotificationStatus) IsTerminal() bool {
+	return s == StatusSent || s == StatusFailed
+}
+
 // Notification represents a notification record in the database.
 type Notification struct {
 	NotificationID string

@@ -27,14 +27,14 @@ func TestGetEnvOrDefault(t *testing.T) {
 	os.Setenv("TEST_ENV_VAR", "test-value")
 	defer os.Unsetenv("TEST_ENV_VAR")
 
-	val := getEnvOrDefault("TEST_ENV_VAR", "default")
+	val := provider.GetEnvOrDefault("TEST_ENV_VAR", "default")
 	if val != "test-value" {
-		t.Errorf("getEnvOrDefault() = %v, want test-value", val)
+		t.Errorf("GetEnvOrDefault() = %v, want test-value", val)
 	}
 
-	val = getEnvOrDefault("NON_EXISTENT_VAR", "default-value")
+	val = provider.GetEnvOrDefault("NON_EXISTENT_VAR", "default-value")
 	if val != "default-value" {
-		t.Errorf("getEnvOrDefault() = %v, want default-value", val)
+		t.Errorf("GetEnvOrDefault() = %v, want default-value", val)
 	}
 }
 
@@ -84,11 +84,12 @@ func TestSender_Send_NoValidRecipients(t *testing.T) {
 func TestSender_Send_NoProvider(t *testing.T) {
 	// Empty registry - no providers configured
 	sender := &Sender{
-		from:     "test@example.com",
+		from:     "sender@alerting.com",
 		registry: provider.NewRegistry(),
 	}
 	notification := &database.Notification{NotificationID: "notif-123"}
-	err := sender.Send(context.Background(), "test@example.com", notification)
+	// Use a non-test domain that won't be skipped
+	err := sender.Send(context.Background(), "recipient@realmail.com", notification)
 	if err == nil || !strings.Contains(err.Error(), "no configured email provider") {
 		t.Errorf("expected 'no configured email provider' error, got %v", err)
 	}

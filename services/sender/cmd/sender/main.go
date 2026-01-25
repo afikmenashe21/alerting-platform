@@ -11,9 +11,10 @@ import (
 	"sender/internal/config"
 	"sender/internal/consumer"
 	"sender/internal/database"
+	"sender/internal/metrics"
 	"sender/internal/sender"
 
-	"github.com/afikmenashe/alerting-platform/pkg/metrics"
+	pkgmetrics "github.com/afikmenashe/alerting-platform/pkg/metrics"
 	"github.com/afikmenashe/alerting-platform/pkg/shared"
 )
 
@@ -84,10 +85,11 @@ func main() {
 	defer redisClient.Close()
 	slog.Info("Successfully connected to Redis")
 
-	// Initialize metrics collector
-	metricsCollector := metrics.NewCollector("sender", redisClient)
-	metricsCollector.Start(ctx)
-	defer metricsCollector.Stop()
+	// Initialize metrics collector with adapter
+	pkgCollector := pkgmetrics.NewCollector("sender", redisClient)
+	pkgCollector.Start(ctx)
+	defer pkgCollector.Stop()
+	metricsRecorder := metrics.NewCollectorAdapter(pkgCollector)
 
 	// Initialize Kafka consumer
 	slog.Info("Connecting to Kafka consumer", "topic", cfg.NotificationsReadyTopic)
@@ -106,7 +108,7 @@ func main() {
 
 	// Main processing loop
 	slog.Info("Starting notification sending loop")
-	if err := processNotifications(ctx, kafkaConsumer, db, notifSender, metricsCollector); err != nil {
+	if err := processNotifications(ctx, kafkaConsumer, db, notifSender, metricsRecorder); err != nil {
 		slog.Error("Notification processing failed", "error", err)
 		os.Exit(1)
 	}
