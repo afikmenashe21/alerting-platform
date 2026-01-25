@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"sender/internal/database"
@@ -34,6 +36,35 @@ func (s *Sender) Type() string {
 	return "webhook"
 }
 
+var dummyWebhookHosts = []string{
+	"example.com",
+	"example.org",
+	"example.net",
+	"test.com",
+	"localhost",
+	"invalid",
+}
+
+func isDummyWebhookURL(endpointValue string) bool {
+	parsed, err := url.Parse(endpointValue)
+	if err != nil {
+		return false
+	}
+
+	host := strings.ToLower(parsed.Hostname())
+	if host == "" {
+		return false
+	}
+
+	for _, dummy := range dummyWebhookHosts {
+		if host == dummy || strings.HasSuffix(host, "."+dummy) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Send sends a notification to a webhook endpoint via HTTP POST.
 // The endpointValue should be a webhook URL.
 func (s *Sender) Send(ctx context.Context, endpointValue string, notification *database.Notification) error {
@@ -44,6 +75,14 @@ func (s *Sender) Send(ctx context.Context, endpointValue string, notification *d
 	// Validate that it's a URL (starts with http:// or https://)
 	if !validation.IsValidURL(endpointValue) {
 		return fmt.Errorf("invalid webhook URL: %q (must be a valid HTTP/HTTPS URL)", endpointValue)
+	}
+
+	if isDummyWebhookURL(endpointValue) {
+		slog.Info("Skipping dummy webhook endpoint",
+			"webhook_url", endpointValue,
+			"notification_id", notification.NotificationID,
+		)
+		return nil
 	}
 
 	// Build webhook payload

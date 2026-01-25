@@ -134,11 +134,26 @@ func TestSender_Send_ValidURL(t *testing.T) {
 
 	ctx := context.Background()
 	// This will fail if webhook URL is not accessible, which is expected in test environment
-	err := sender.Send(ctx, "https://webhook.example.com/endpoint", notification)
+	err := sender.Send(ctx, "https://webhook.real-domain.com/endpoint", notification)
 
 	if err != nil {
 		// Expected if webhook URL is not accessible
 		t.Logf("Send() error (expected if webhook not accessible): %v", err)
+	}
+}
+
+func TestSender_Send_DummyURL(t *testing.T) {
+	sender := NewSender()
+
+	notification := &database.Notification{
+		NotificationID: "notif-123",
+	}
+
+	ctx := context.Background()
+	err := sender.Send(ctx, "https://webhook.example.com/endpoint", notification)
+
+	if err != nil {
+		t.Fatalf("Send() should skip dummy webhook URLs, got error: %v", err)
 	}
 }
 
