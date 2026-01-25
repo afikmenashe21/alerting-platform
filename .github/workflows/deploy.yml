@@ -4,20 +4,16 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # Allow manual trigger
-
-env:
-  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
-  ECR_REPOSITORY_PREFIX: alerting-platform
-
-jobs:
-  build-and-deploy:
-    name: Build and Deploy Services
-    runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        service:
+      - master
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
           - rule-service
           - rule-updater
           - evaluator
@@ -25,44 +21,80 @@ jobs:
           - sender
           - alert-producer
           - metrics-service
-    
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+  ECR_REPOSITORY_PREFIX: alerting-platform
+
+jobs:
+  setup:
+    name: Setup Build Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      services_list: ${{ steps.set-matrix.outputs.services_list }}
+    steps:
+      - name: Set matrix based on input
+        id: set-matrix
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.service }}" != "all" ]; then
+            # Single service selected
+            echo 'matrix={"service":["${{ inputs.service }}"]}' >> $GITHUB_OUTPUT
+            echo 'services_list=${{ inputs.service }}' >> $GITHUB_OUTPUT
+          else
+            # All services (push event or "all" selected)
+            echo 'matrix={"service":["rule-service","rule-updater","evaluator","aggregator","sender","alert-producer","metrics-service"]}' >> $GITHUB_OUTPUT
+            echo 'services_list=rule-service rule-updater evaluator aggregator sender alert-producer metrics-service' >> $GITHUB_OUTPUT
+          fi
+
+  build-and-deploy:
+    name: Build and Deploy ${{ matrix.service }}
+    needs: setup
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+      fail-fast: false
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-      
+
       - name: Get short SHA
         id: vars
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-      
+
       - name: Build, tag, and push image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ steps.vars.outputs.sha_short }}
         run: |
+          echo "Building ${{ matrix.service }}..."
+
           # Build image
           docker build \
             -f services/${{ matrix.service }}/Dockerfile \
             -t $ECR_REGISTRY/$ECR_REPOSITORY_PREFIX/${{ matrix.service }}:$IMAGE_TAG \
             -t $ECR_REGISTRY/$ECR_REPOSITORY_PREFIX/${{ matrix.service }}:latest \
             .
-          
+
           # Push both tags
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_PREFIX/${{ matrix.service }}:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_PREFIX/${{ matrix.service }}:latest
-          
+
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_PREFIX/${{ matrix.service }}:$IMAGE_TAG" >> $GITHUB_OUTPUT
-      
+
       - name: Update ECS service
         run: |
           aws ecs update-service \
@@ -70,19 +102,19 @@ jobs:
             --service ${{ matrix.service }} \
             --force-new-deployment \
             --region ${{ env.AWS_REGION }}
-      
+
       - name: Wait for service stability
         run: |
           aws ecs wait services-stable \
             --cluster alerting-platform-prod-cluster \
             --services ${{ matrix.service }} \
             --region ${{ env.AWS_REGION }}
-  
+
   verify-deployment:
     name: Verify Deployment
-    needs: build-and-deploy
+    needs: [setup, build-and-deploy]
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -90,31 +122,31 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      
+
       - name: Check service health
+        env:
+          SERVICES_LIST: ${{ needs.setup.outputs.services_list }}
         run: |
-          # Get ALB DNS from Terraform outputs (stored in S3 or Parameter Store)
-          # For now, we'll just check ECS service status
-          
-          services="rule-service rule-updater evaluator aggregator sender alert-producer metrics-service"
-          
-          for service in $services; do
+          echo "Verifying deployed services: $SERVICES_LIST"
+          echo ""
+
+          for service in $SERVICES_LIST; do
             echo "Checking $service..."
-            
+
             running_count=$(aws ecs describe-services \
               --cluster alerting-platform-prod-cluster \
               --services $service \
               --region ${{ env.AWS_REGION }} \
               --query 'services[0].runningCount' \
               --output text)
-            
+
             desired_count=$(aws ecs describe-services \
               --cluster alerting-platform-prod-cluster \
               --services $service \
               --region ${{ env.AWS_REGION }} \
               --query 'services[0].desiredCount' \
               --output text)
-            
+
             if [ "$running_count" -eq "$desired_count" ]; then
               echo "✓ $service is healthy ($running_count/$desired_count tasks running)"
             else
@@ -122,6 +154,6 @@ jobs:
               exit 1
             fi
           done
-          
+
           echo ""
           echo "✓ All services deployed successfully!"
