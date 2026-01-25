@@ -1,14 +1,10 @@
 name: Deploy to AWS ECS
 
 on:
-  push:
-    branches:
-      - main
-      - master
   workflow_dispatch:
     inputs:
       service:
-        description: 'Service to deploy'
+        description: 'Service to deploy (or "all" for all services)'
         required: true
         default: 'all'
         type: choice
@@ -37,12 +33,12 @@ jobs:
       - name: Set matrix based on input
         id: set-matrix
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.service }}" != "all" ]; then
+          if [ "${{ inputs.service }}" != "all" ]; then
             # Single service selected
             echo 'matrix={"service":["${{ inputs.service }}"]}' >> $GITHUB_OUTPUT
             echo 'services_list=${{ inputs.service }}' >> $GITHUB_OUTPUT
           else
-            # All services (push event or "all" selected)
+            # All services
             echo 'matrix={"service":["rule-service","rule-updater","evaluator","aggregator","sender","alert-producer","metrics-service"]}' >> $GITHUB_OUTPUT
             echo 'services_list=rule-service rule-updater evaluator aggregator sender alert-producer metrics-service' >> $GITHUB_OUTPUT
           fi
