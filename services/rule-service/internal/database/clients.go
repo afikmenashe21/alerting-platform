@@ -65,10 +65,14 @@ func (db *DB) ListClients(ctx context.Context, limit, offset int) (*ClientListRe
 		offset = 0
 	}
 
-	// Get total count
+	// Get total count - use approximate count for instant response
 	var total int64
-	if err := db.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM clients").Scan(&total); err != nil {
-		return nil, fmt.Errorf("failed to count clients: %w", err)
+	approxQuery := `SELECT n_live_tup FROM pg_stat_user_tables WHERE relname = 'clients'`
+	if err := db.conn.QueryRowContext(ctx, approxQuery).Scan(&total); err != nil {
+		// Fallback to regular count if pg_stat fails
+		if err := db.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM clients").Scan(&total); err != nil {
+			return nil, fmt.Errorf("failed to count clients: %w", err)
+		}
 	}
 
 	// Get paginated results

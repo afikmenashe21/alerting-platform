@@ -3,6 +3,7 @@ package database
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -45,7 +46,7 @@ type HourlyCount struct {
 const queryTimeout = 2 * time.Second
 
 // GetSystemMetrics aggregates metrics from all tables.
-// Uses approximate counts from pg_stat for large tables to ensure fast response.
+// Uses approximate counts from pg_stat for large tables and runs queries in parallel.
 func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 	metrics := &SystemMetrics{
 		NotificationsByStatus: make(map[string]int64),
@@ -54,23 +55,24 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 		CollectedAt:           time.Now().UTC(),
 	}
 
+	// Mutex to protect concurrent writes to metrics
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
 	// Helper to create a context with query timeout
 	queryCtx := func() (context.Context, context.CancelFunc) {
 		return context.WithTimeout(ctx, queryTimeout)
 	}
 
-	// Use approximate row counts from pg_stat for large tables
-	// This is instant regardless of table size
+	// Query 1: Approximate row counts (fast, run first as other queries depend on it)
 	approxCtx, approxCancel := queryCtx()
-	defer approxCancel()
 	approxQuery := `
-		SELECT relname, n_live_tup 
-		FROM pg_stat_user_tables 
+		SELECT relname, n_live_tup
+		FROM pg_stat_user_tables
 		WHERE relname IN ('notifications', 'rules', 'endpoints', 'clients')
 	`
 	approxRows, err := db.conn.QueryContext(approxCtx, approxQuery)
 	if err == nil {
-		defer approxRows.Close()
 		for approxRows.Next() {
 			var tableName string
 			var count int64
@@ -87,131 +89,180 @@ func (db *DB) GetSystemMetrics(ctx context.Context) (*SystemMetrics, error) {
 				}
 			}
 		}
+		approxRows.Close()
 	}
+	approxCancel()
 
-	// Get notification status breakdown from recent notifications (fast sampling)
-	// This gives a representative distribution without full table scan
-	statusCtx, statusCancel := queryCtx()
-	defer statusCancel()
-	// Sample last 1000 notifications for status distribution, then extrapolate
-	statusQuery := `
-		WITH recent AS (
-			SELECT status FROM notifications 
-			ORDER BY created_at DESC 
-			LIMIT 1000
-		)
-		SELECT status, COUNT(*) as count FROM recent GROUP BY status
-	`
-	statusRows, err := db.conn.QueryContext(statusCtx, statusQuery)
-	if err == nil {
-		defer statusRows.Close()
-		var totalSampled int64
-		sampleCounts := make(map[string]int64)
-		for statusRows.Next() {
-			var status string
-			var count int64
-			if err := statusRows.Scan(&status, &count); err == nil {
-				sampleCounts[status] = count
-				totalSampled += count
+	// Run remaining queries in parallel
+	// Query 2: Status sampling (needs TotalNotifications from query 1)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		statusCtx, statusCancel := queryCtx()
+		defer statusCancel()
+		statusQuery := `
+			WITH recent AS (
+				SELECT status FROM notifications
+				ORDER BY created_at DESC
+				LIMIT 1000
+			)
+			SELECT status, COUNT(*) as count FROM recent GROUP BY status
+		`
+		statusRows, err := db.conn.QueryContext(statusCtx, statusQuery)
+		if err == nil {
+			defer statusRows.Close()
+			var totalSampled int64
+			sampleCounts := make(map[string]int64)
+			for statusRows.Next() {
+				var status string
+				var count int64
+				if err := statusRows.Scan(&status, &count); err == nil {
+					sampleCounts[status] = count
+					totalSampled += count
+				}
 			}
-		}
-		// Extrapolate to total notifications
-		if totalSampled > 0 && metrics.TotalNotifications > 0 {
-			for status, count := range sampleCounts {
-				metrics.NotificationsByStatus[status] = (count * metrics.TotalNotifications) / totalSampled
+			mu.Lock()
+			if totalSampled > 0 && metrics.TotalNotifications > 0 {
+				for status, count := range sampleCounts {
+					metrics.NotificationsByStatus[status] = (count * metrics.TotalNotifications) / totalSampled
+				}
 			}
+			mu.Unlock()
 		}
-	}
+	}()
 
-	// Get notifications in last 24 hours (uses idx_notifications_created_at)
-	last24hCtx, last24hCancel := queryCtx()
-	defer last24hCancel()
-	last24hQuery := `
-		SELECT COUNT(*) FROM notifications
-		WHERE created_at >= NOW() - INTERVAL '24 hours'
-	`
-	_ = db.conn.QueryRowContext(last24hCtx, last24hQuery).Scan(&metrics.NotificationsLast24h)
+	// Query 3: Last 24h count
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		last24hCtx, last24hCancel := queryCtx()
+		defer last24hCancel()
+		last24hQuery := `
+			SELECT COUNT(*) FROM notifications
+			WHERE created_at >= NOW() - INTERVAL '24 hours'
+		`
+		var count int64
+		if err := db.conn.QueryRowContext(last24hCtx, last24hQuery).Scan(&count); err == nil {
+			mu.Lock()
+			metrics.NotificationsLast24h = count
+			mu.Unlock()
+		}
+	}()
 
-	// Get notifications in last hour (uses idx_notifications_created_at)
-	lastHourCtx, lastHourCancel := queryCtx()
-	defer lastHourCancel()
-	lastHourQuery := `
-		SELECT COUNT(*) FROM notifications
-		WHERE created_at >= NOW() - INTERVAL '1 hour'
-	`
-	_ = db.conn.QueryRowContext(lastHourCtx, lastHourQuery).Scan(&metrics.NotificationsLastHour)
+	// Query 4: Last hour count
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		lastHourCtx, lastHourCancel := queryCtx()
+		defer lastHourCancel()
+		lastHourQuery := `
+			SELECT COUNT(*) FROM notifications
+			WHERE created_at >= NOW() - INTERVAL '1 hour'
+		`
+		var count int64
+		if err := db.conn.QueryRowContext(lastHourCtx, lastHourQuery).Scan(&count); err == nil {
+			mu.Lock()
+			metrics.NotificationsLastHour = count
+			mu.Unlock()
+		}
+	}()
 
-	// Get hourly notification counts for last 24 hours (uses idx_notifications_created_at)
-	hourlyCtx, hourlyCancel := queryCtx()
-	defer hourlyCancel()
-	hourlyQuery := `
-		SELECT
-			date_trunc('hour', created_at) as hour,
-			COUNT(*) as count
-		FROM notifications
-		WHERE created_at >= NOW() - INTERVAL '24 hours'
-		GROUP BY date_trunc('hour', created_at)
-		ORDER BY hour ASC
-	`
-	hourlyRows, err := db.conn.QueryContext(hourlyCtx, hourlyQuery)
-	if err == nil {
-		defer hourlyRows.Close()
-		for hourlyRows.Next() {
-			var hour time.Time
-			var count int64
-			if err := hourlyRows.Scan(&hour, &count); err == nil {
-				metrics.NotificationsByHour = append(metrics.NotificationsByHour, HourlyCount{
-					Hour:  hour.Format(time.RFC3339),
-					Count: count,
-				})
+	// Query 5: Hourly breakdown
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		hourlyCtx, hourlyCancel := queryCtx()
+		defer hourlyCancel()
+		hourlyQuery := `
+			SELECT
+				date_trunc('hour', created_at) as hour,
+				COUNT(*) as count
+			FROM notifications
+			WHERE created_at >= NOW() - INTERVAL '24 hours'
+			GROUP BY date_trunc('hour', created_at)
+			ORDER BY hour ASC
+		`
+		hourlyRows, err := db.conn.QueryContext(hourlyCtx, hourlyQuery)
+		if err == nil {
+			defer hourlyRows.Close()
+			var hourlyData []HourlyCount
+			for hourlyRows.Next() {
+				var hour time.Time
+				var count int64
+				if err := hourlyRows.Scan(&hour, &count); err == nil {
+					hourlyData = append(hourlyData, HourlyCount{
+						Hour:  hour.Format(time.RFC3339),
+						Count: count,
+					})
+				}
 			}
+			mu.Lock()
+			metrics.NotificationsByHour = hourlyData
+			mu.Unlock()
 		}
-	}
+	}()
 
-	// Get rule enabled/disabled counts
-	rulesCtx, rulesCancel := queryCtx()
-	defer rulesCancel()
-	rulesQuery := `
-		SELECT
-			COUNT(*) FILTER (WHERE enabled = true) as enabled,
-			COUNT(*) FILTER (WHERE enabled = false) as disabled
-		FROM rules
-	`
-	_ = db.conn.QueryRowContext(rulesCtx, rulesQuery).Scan(
-		&metrics.EnabledRules,
-		&metrics.DisabledRules,
-	)
+	// Query 6: Rule enabled/disabled counts
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		rulesCtx, rulesCancel := queryCtx()
+		defer rulesCancel()
+		rulesQuery := `
+			SELECT
+				COUNT(*) FILTER (WHERE enabled = true) as enabled,
+				COUNT(*) FILTER (WHERE enabled = false) as disabled
+			FROM rules
+		`
+		var enabled, disabled int64
+		if err := db.conn.QueryRowContext(rulesCtx, rulesQuery).Scan(&enabled, &disabled); err == nil {
+			mu.Lock()
+			metrics.EnabledRules = enabled
+			metrics.DisabledRules = disabled
+			mu.Unlock()
+		}
+	}()
 
-	// Get endpoint counts by type (small result set, fast query)
-	endpointsCtx, endpointsCancel := queryCtx()
-	defer endpointsCancel()
-	endpointsQuery := `
-		SELECT
-			type,
-			COUNT(*) as count,
-			COUNT(*) FILTER (WHERE enabled = true) as enabled_count
-		FROM endpoints
-		GROUP BY type
-	`
-	endpointRows, err := db.conn.QueryContext(endpointsCtx, endpointsQuery)
-	if err == nil {
-		defer endpointRows.Close()
-		var totalEndpoints, enabledEndpoints int64
-		for endpointRows.Next() {
-			var endpointType string
-			var count, enabledCount int64
-			if err := endpointRows.Scan(&endpointType, &count, &enabledCount); err == nil {
-				metrics.EndpointsByType[endpointType] = count
-				totalEndpoints += count
-				enabledEndpoints += enabledCount
+	// Query 7: Endpoint counts by type
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		endpointsCtx, endpointsCancel := queryCtx()
+		defer endpointsCancel()
+		endpointsQuery := `
+			SELECT
+				type,
+				COUNT(*) as count,
+				COUNT(*) FILTER (WHERE enabled = true) as enabled_count
+			FROM endpoints
+			GROUP BY type
+		`
+		endpointRows, err := db.conn.QueryContext(endpointsCtx, endpointsQuery)
+		if err == nil {
+			defer endpointRows.Close()
+			endpointsByType := make(map[string]int64)
+			var totalEndpoints, enabledEndpoints int64
+			for endpointRows.Next() {
+				var endpointType string
+				var count, enabledCount int64
+				if err := endpointRows.Scan(&endpointType, &count, &enabledCount); err == nil {
+					endpointsByType[endpointType] = count
+					totalEndpoints += count
+					enabledEndpoints += enabledCount
+				}
 			}
+			mu.Lock()
+			if totalEndpoints > 0 {
+				metrics.EndpointsByType = endpointsByType
+				metrics.TotalEndpoints = totalEndpoints
+				metrics.EnabledEndpoints = enabledEndpoints
+			}
+			mu.Unlock()
 		}
-		// Use exact counts from this query if we got them
-		if totalEndpoints > 0 {
-			metrics.TotalEndpoints = totalEndpoints
-			metrics.EnabledEndpoints = enabledEndpoints
-		}
-	}
+	}()
+
+	// Wait for all parallel queries to complete
+	wg.Wait()
 
 	return metrics, nil
 }

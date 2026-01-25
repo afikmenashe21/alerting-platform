@@ -83,11 +83,22 @@ func (db *DB) ListRules(ctx context.Context, clientID *string, limit, offset int
 		argIndex++
 	}
 
-	// Get total count
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM rules %s", whereClause)
+	// Get total count - use approximate count for unfiltered queries (instant for large tables)
 	var total int64
-	if err := db.conn.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
-		return nil, fmt.Errorf("failed to count rules: %w", err)
+	if clientID == nil {
+		// Unfiltered: use pg_stat for instant approximate count
+		approxQuery := `SELECT n_live_tup FROM pg_stat_user_tables WHERE relname = 'rules'`
+		if err := db.conn.QueryRowContext(ctx, approxQuery).Scan(&total); err != nil {
+			// Fallback to regular count if pg_stat fails
+			countQuery := "SELECT COUNT(*) FROM rules"
+			_ = db.conn.QueryRowContext(ctx, countQuery).Scan(&total)
+		}
+	} else {
+		// Filtered: use exact count (filter reduces scan significantly)
+		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM rules %s", whereClause)
+		if err := db.conn.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+			return nil, fmt.Errorf("failed to count rules: %w", err)
+		}
 	}
 
 	// Get paginated results

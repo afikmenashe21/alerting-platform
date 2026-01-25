@@ -24,6 +24,7 @@ jobs:
           - aggregator
           - sender
           - alert-producer
+          - metrics-service
     
     steps:
       - name: Checkout code
@@ -95,7 +96,7 @@ jobs:
           # Get ALB DNS from Terraform outputs (stored in S3 or Parameter Store)
           # For now, we'll just check ECS service status
           
-          services="rule-service rule-updater evaluator aggregator sender alert-producer"
+          services="rule-service rule-updater evaluator aggregator sender alert-producer metrics-service"
           
           for service in $services; do
             echo "Checking $service..."

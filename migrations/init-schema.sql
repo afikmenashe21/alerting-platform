@@ -57,16 +57,22 @@ CREATE TABLE notifications (
     UNIQUE(client_id, alert_id)
 );
 
--- Indexes
+-- Indexes for primary lookups
 CREATE INDEX idx_rules_enabled ON rules(enabled) WHERE enabled = TRUE;
 CREATE INDEX idx_rules_client ON rules(client_id);
-CREATE INDEX idx_rules_created_at ON rules(created_at);
+CREATE INDEX idx_rules_created_at ON rules(created_at DESC);
 CREATE INDEX idx_endpoints_rule ON endpoints(rule_id);
-CREATE INDEX idx_endpoints_created_at ON endpoints(created_at);
+CREATE INDEX idx_endpoints_created_at ON endpoints(created_at DESC);
 CREATE INDEX idx_notifications_client_status ON notifications(client_id, status);
 CREATE INDEX idx_notifications_status ON notifications(status);
-CREATE INDEX idx_notifications_created_at ON notifications(created_at);
-CREATE INDEX idx_clients_created_at ON clients(created_at);
+CREATE INDEX idx_notifications_created_at ON notifications(created_at DESC);
+CREATE INDEX idx_clients_created_at ON clients(created_at DESC);
+
+-- Composite indexes for filtering + ordering (pagination performance)
+CREATE INDEX idx_rules_client_created_at ON rules(client_id, created_at DESC);
+CREATE INDEX idx_endpoints_rule_created_at ON endpoints(rule_id, created_at DESC);
+CREATE INDEX idx_notifications_client_created_at ON notifications(client_id, created_at DESC);
+CREATE INDEX idx_notifications_status_created_at ON notifications(status, created_at DESC);
 
 -- Verify tables were created
 SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;

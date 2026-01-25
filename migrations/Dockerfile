@@ -1,7 +1,8 @@
 FROM postgres:15-alpine
 
-# Copy migration SQL file
+# Copy migration SQL files
 COPY init-schema.sql /migrations/init-schema.sql
+COPY add-composite-indexes.sql /migrations/add-composite-indexes.sql
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh

@@ -91,11 +91,22 @@ func (db *DB) ListEndpoints(ctx context.Context, ruleID *string, limit, offset i
 		argIndex++
 	}
 
-	// Get total count
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM endpoints %s", whereClause)
+	// Get total count - use approximate count for unfiltered queries (instant for large tables)
 	var total int64
-	if err := db.conn.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
-		return nil, fmt.Errorf("failed to count endpoints: %w", err)
+	if ruleID == nil {
+		// Unfiltered: use pg_stat for instant approximate count
+		approxQuery := `SELECT n_live_tup FROM pg_stat_user_tables WHERE relname = 'endpoints'`
+		if err := db.conn.QueryRowContext(ctx, approxQuery).Scan(&total); err != nil {
+			// Fallback to regular count if pg_stat fails
+			countQuery := "SELECT COUNT(*) FROM endpoints"
+			_ = db.conn.QueryRowContext(ctx, countQuery).Scan(&total)
+		}
+	} else {
+		// Filtered: use exact count (filter reduces scan significantly)
+		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM endpoints %s", whereClause)
+		if err := db.conn.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+			return nil, fmt.Errorf("failed to count endpoints: %w", err)
+		}
 	}
 
 	// Get paginated results
