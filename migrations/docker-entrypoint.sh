@@ -43,6 +43,12 @@ if [ "$TABLE_COUNT" = "4" ]; then
     # Run counts cache migration for fast exact counts
     echo "Setting up counts cache table..."
     PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" < /migrations/add-counts-cache.sql
+
+    # Cleanup notifications if cleanup script exists
+    if [ -f /migrations/cleanup-notifications.sql ]; then
+        echo "Cleaning up notifications..."
+        PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" < /migrations/cleanup-notifications.sql
+    fi
 else
     echo "New database detected - running full schema initialization"
     echo "================================"
