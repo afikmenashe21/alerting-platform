@@ -253,7 +253,7 @@ module "aggregator" {
     REDIS_ADDR                = module.redis.endpoint
     ALERTS_MATCHED_TOPIC      = "alerts.matched"
     NOTIFICATIONS_READY_TOPIC = "notifications.ready"
-    CONSUMER_GROUP_ID         = "aggregator-group"
+    CONSUMER_GROUP_ID         = "aggregator-group-v2"
   }
 
   load_balancer_enabled = false
@@ -299,7 +299,7 @@ module "sender" {
     POSTGRES_DSN              = "postgres://${var.db_username}:${var.db_password}@${module.rds.endpoint}/${var.db_name}?sslmode=require"
     REDIS_ADDR                = module.redis.endpoint
     NOTIFICATIONS_READY_TOPIC = "notifications.ready"
-    CONSUMER_GROUP_ID         = "sender-group"
+    CONSUMER_GROUP_ID         = "sender-group-v2"
     # Email provider configuration (Strategy Pattern)
     EMAIL_PROVIDER            = var.email_provider    # "resend" (default), "ses", or empty for auto-detect
     EMAIL_FROM                = var.email_from        # Sender address

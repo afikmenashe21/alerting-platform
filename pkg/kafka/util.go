@@ -91,6 +91,6 @@ func NewReaderConfig(brokers []string, topic, groupID string) kafka.ReaderConfig
 		MaxBytes:       10e6, // 10MB
 		MaxWait:        MaxPollWait,
 		CommitInterval: CommitInterval,
-		StartOffset:    kafka.FirstOffset, // Start from beginning if no committed offset
+		StartOffset:    kafka.LastOffset, // Start from latest if no committed offset (skip old messages)
 	}
 }
