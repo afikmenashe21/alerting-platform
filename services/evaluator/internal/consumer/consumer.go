@@ -66,7 +66,7 @@ func (c *Consumer) ReadMessage(ctx context.Context) (*events.AlertNew, *kafka.Me
 		AlertID:       pb.AlertId,
 		SchemaVersion: int(pb.SchemaVersion),
 		EventTS:       pb.EventTs,
-		Severity:      pb.Severity.String(),
+		Severity:      events.SeverityFromProto(pb.Severity),
 		Source:        pb.Source,
 		Name:          pb.Name,
 		Context:       pb.Context,

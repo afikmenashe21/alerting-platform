@@ -9,7 +9,6 @@ import (
 
 	kafkautil "github.com/afikmenashe/alerting-platform/pkg/kafka"
 	pbalerts "github.com/afikmenashe/alerting-platform/pkg/proto/alerts"
-	pbcommon "github.com/afikmenashe/alerting-platform/pkg/proto/common"
 	"evaluator/internal/events"
 	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
@@ -118,23 +117,11 @@ func createTopicIfNotExists(broker, topic string) {
 // The message is keyed by client_id for partition distribution (tenant locality).
 // Returns an error if serialization or publishing fails.
 func (p *Producer) Publish(ctx context.Context, matched *events.AlertMatched) error {
-	sev := pbcommon.Severity_UNSPECIFIED
-	switch matched.Severity {
-	case "LOW":
-		sev = pbcommon.Severity_LOW
-	case "MEDIUM":
-		sev = pbcommon.Severity_MEDIUM
-	case "HIGH":
-		sev = pbcommon.Severity_HIGH
-	case "CRITICAL":
-		sev = pbcommon.Severity_CRITICAL
-	}
-
 	pb := &pbalerts.AlertMatched{
 		AlertId:       matched.AlertID,
 		SchemaVersion: int32(matched.SchemaVersion),
 		EventTs:       matched.EventTS,
-		Severity:      sev,
+		Severity:      events.SeverityToProto(matched.Severity),
 		Source:        matched.Source,
 		Name:          matched.Name,
 		Context:       matched.Context,
