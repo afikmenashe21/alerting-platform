@@ -10,6 +10,8 @@ Customers (tenants) define rules like: *"If alert has severity=HIGH and source=p
 
 The platform receives a stream of alerts, matches them against all active rules in real-time, deduplicates notifications, and delivers them reliably with at-least-once semantics.
 
+![Alerting Platform Architecture](docs/architecture/alerting-architecture.svg)
+
 ## Architecture
 
 ```
