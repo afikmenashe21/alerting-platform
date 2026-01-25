@@ -12,8 +12,6 @@ import (
 	"alert-producer/internal/config"
 	"alert-producer/internal/generator"
 	"alert-producer/internal/producer"
-
-	"github.com/afikmenashe/alerting-platform/pkg/metrics"
 )
 
 const (
@@ -28,26 +26,20 @@ type Processor struct {
 	generator *generator.Generator
 	publisher producer.AlertPublisher
 	cfg       *config.Config
-	metrics   *metrics.Collector
+	metrics   MetricsRecorder
 }
 
-// NewProcessor creates a new alert processor (without metrics).
-func NewProcessor(gen *generator.Generator, pub producer.AlertPublisher, cfg *config.Config) *Processor {
-	return &Processor{
-		generator: gen,
-		publisher: pub,
-		cfg:       cfg,
-		metrics:   nil,
+// NewProcessor creates a new alert processor.
+// If metrics is nil, a no-op implementation is used.
+func NewProcessor(gen *generator.Generator, pub producer.AlertPublisher, cfg *config.Config, metrics MetricsRecorder) *Processor {
+	if metrics == nil {
+		metrics = NoOpMetrics{}
 	}
-}
-
-// NewProcessorWithMetrics creates a processor with shared metrics collector.
-func NewProcessorWithMetrics(gen *generator.Generator, pub producer.AlertPublisher, cfg *config.Config, m *metrics.Collector) *Processor {
 	return &Processor{
 		generator: gen,
 		publisher: pub,
 		cfg:       cfg,
-		metrics:   m,
+		metrics:   metrics,
 	}
 }
 

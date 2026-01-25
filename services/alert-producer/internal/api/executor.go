@@ -70,9 +70,9 @@ func (j *Job) execute(ctx context.Context, pub producer.AlertPublisher, cfg *con
 		return j.sendCustomAlerts(ctx, pub, *j.Config.Count, interval)
 	}
 
-	// Standard modes via processor
+	// Standard modes via processor (nil metrics uses no-op implementation)
 	gen := generator.New(*cfg)
-	proc := processor.NewProcessor(gen, pub, cfg)
+	proc := processor.NewProcessor(gen, pub, cfg, nil)
 	progress := func(sent int) { j.SetAlertsSent(int64(sent)) }
 
 	if j.Config.Test {

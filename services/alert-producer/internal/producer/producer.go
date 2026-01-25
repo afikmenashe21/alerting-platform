@@ -4,19 +4,16 @@ package producer
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
-	kafkautil "github.com/afikmenashe/alerting-platform/pkg/kafka"
-	pbalerts "github.com/afikmenashe/alerting-platform/pkg/proto/alerts"
-	pbcommon "github.com/afikmenashe/alerting-platform/pkg/proto/common"
 	"alert-producer/internal/generator"
+
+	kafkautil "github.com/afikmenashe/alerting-platform/pkg/kafka"
 	"github.com/segmentio/kafka-go"
-	"google.golang.org/protobuf/proto"
 )
 
 // AlertPublisher defines the interface for publishing alerts.
@@ -81,77 +78,38 @@ func New(brokers string, topic string) (*Producer, error) {
 }
 
 
+const (
+	// maxWriteRetries is the number of attempts for writing to Kafka.
+	maxWriteRetries = 2
+	// retryDelay is the delay between retries when topic is not ready.
+	retryDelay = 2 * time.Second
+)
+
 // Publish serializes an alert to protobuf and publishes it to Kafka.
 // The message is keyed by alert_id for even partition distribution.
 // Returns an error if serialization or publishing fails.
 func (p *Producer) Publish(ctx context.Context, alert *generator.Alert) error {
-	sev := pbcommon.Severity_UNSPECIFIED
-	switch strings.ToUpper(alert.Severity) {
-	case "LOW":
-		sev = pbcommon.Severity_LOW
-	case "MEDIUM":
-		sev = pbcommon.Severity_MEDIUM
-	case "HIGH":
-		sev = pbcommon.Severity_HIGH
-	case "CRITICAL":
-		sev = pbcommon.Severity_CRITICAL
-	}
-
-	pb := &pbalerts.AlertNew{
-		AlertId:       alert.AlertID,
-		SchemaVersion: int32(alert.SchemaVersion),
-		EventTs:       alert.EventTS,
-		Severity:      sev,
-		Source:        alert.Source,
-		Name:          alert.Name,
-		Context:       alert.Context,
-	}
-
-	payload, err := proto.Marshal(pb)
+	payload, err := encodeAlert(alert)
 	if err != nil {
 		slog.Error("Failed to marshal alert to protobuf",
 			"alert_id", alert.AlertID,
 			"error", err,
 		)
-		return fmt.Errorf("failed to marshal alert: %w", err)
+		return err
 	}
-	
-	// Create Kafka message with key, value, headers, and timestamp
-	// Partition key: hash of alert_id for even distribution across partitions
-	// - Prevents hot partitions by ensuring random distribution
-	// - Same alert_id always maps to same partition (deterministic)
-	// - Kafka's Hash balancer will hash this key again internally
-	partitionKey := hashAlertID(alert.AlertID)
-	msg := kafka.Message{
-		Key:   partitionKey,
-		Value: payload,
-		Headers: []kafka.Header{
-			{
-				Key:   "content-type",
-				Value: []byte("application/x-protobuf"),
-			},
-			{
-				Key:   "schema_version",
-				Value: []byte(fmt.Sprintf("%d", alert.SchemaVersion)),
-			},
-			{
-				Key:   "severity",
-				Value: []byte(alert.Severity),
-			},
-		},
-		Time: time.Unix(alert.EventTS, 0), // Set message timestamp from alert
-	}
-	
-	// Write to Kafka (synchronous, waits for ack)
-	// Retry once if topic is not ready (handles async topic creation)
-	maxRetries := 2
+
+	msg := buildKafkaMessage(alert, payload)
+	return p.writeWithRetry(ctx, msg, alert.AlertID)
+}
+
+// writeWithRetry writes a message to Kafka with retry logic for transient errors.
+// Retries once if the topic is not ready (handles async topic creation).
+func (p *Producer) writeWithRetry(ctx context.Context, msg kafka.Message, alertID string) error {
 	var writeErr error
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// Check if context is cancelled before attempting to write
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+
+	for attempt := 1; attempt <= maxWriteRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
 		writeErr = p.writer.WriteMessages(ctx, msg)
@@ -159,28 +117,22 @@ func (p *Producer) Publish(ctx context.Context, alert *generator.Alert) error {
 			return nil
 		}
 
-		// Check if error is due to context cancellation
 		if errors.Is(writeErr, context.Canceled) || ctx.Err() == context.Canceled {
 			return context.Canceled
 		}
 
-		// Check if error is due to topic not existing
-		errStr := writeErr.Error()
-		if (strings.Contains(errStr, "Unknown Topic Or Partition") || 
-			strings.Contains(errStr, "does not exist")) && attempt < maxRetries {
+		if isTopicNotReadyError(writeErr) && attempt < maxWriteRetries {
 			slog.Info("Topic not ready, retrying after delay",
-				"alert_id", alert.AlertID,
+				"alert_id", alertID,
 				"topic", p.topic,
 				"attempt", attempt,
-				"max_retries", maxRetries,
 			)
-			time.Sleep(2 * time.Second)
+			time.Sleep(retryDelay)
 			continue
 		}
 
-		// For other errors or final attempt, return error
 		slog.Error("Failed to write message to Kafka",
-			"alert_id", alert.AlertID,
+			"alert_id", alertID,
 			"topic", p.topic,
 			"error", writeErr,
 			"attempt", attempt,
@@ -188,19 +140,14 @@ func (p *Producer) Publish(ctx context.Context, alert *generator.Alert) error {
 		return fmt.Errorf("failed to write message to Kafka: %w", writeErr)
 	}
 
-	return fmt.Errorf("failed to write message to Kafka after %d attempts: %w", maxRetries, writeErr)
+	return fmt.Errorf("failed to write message to Kafka after %d attempts: %w", maxWriteRetries, writeErr)
 }
 
-// hashAlertID creates a deterministic hash of the alert_id for partition key.
-// This ensures even distribution across partitions and avoids hot partitions.
-// The hash is deterministic so the same alert_id always maps to the same partition.
-// Note: Kafka's Hash balancer will hash this key again internally, but pre-hashing
-// gives us explicit control and ensures good distribution even if Kafka's hashing changes.
-func hashAlertID(alertID string) []byte {
-	hash := sha256.Sum256([]byte(alertID))
-	// Return first 16 bytes for efficiency (Kafka will hash this again internally)
-	// This provides good distribution while keeping the key size reasonable
-	return hash[:16]
+// isTopicNotReadyError checks if the error indicates the topic doesn't exist yet.
+func isTopicNotReadyError(err error) bool {
+	errStr := err.Error()
+	return strings.Contains(errStr, "Unknown Topic Or Partition") ||
+		strings.Contains(errStr, "does not exist")
 }
 
 // Close gracefully closes the Kafka writer and releases resources.

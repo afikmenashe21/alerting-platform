@@ -50,7 +50,7 @@ func TestNewProcessor(t *testing.T) {
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
 
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 	if proc == nil {
 		t.Fatal("NewProcessor should not return nil")
 	}
@@ -75,7 +75,7 @@ func TestProcessor_Process_BurstMode(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	err := proc.Process(ctx)
@@ -105,7 +105,7 @@ func TestProcessor_Process_ContinuousMode(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	err := proc.Process(ctx)
@@ -134,7 +134,7 @@ func TestProcessor_Process_ErrorOnBoilerplate(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(true, "publish error")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	err := proc.Process(ctx)
@@ -152,7 +152,7 @@ func TestProcessor_ProcessBurst(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	err := proc.ProcessBurst(ctx, 3)
@@ -174,7 +174,7 @@ func TestProcessor_ProcessBurst_Error(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(true, "publish error")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	err := proc.ProcessBurst(ctx, 3)
@@ -192,7 +192,7 @@ func TestProcessor_ProcessBurst_ContextCancellation(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -215,7 +215,7 @@ func TestProcessor_ProcessContinuous(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	err := proc.ProcessContinuous(ctx, 100.0, 200*time.Millisecond) // Higher RPS and longer duration
@@ -237,7 +237,7 @@ func TestProcessor_ProcessContinuous_Error(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(true, "publish error")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	// Use higher RPS and longer duration to ensure an alert is published before duration expires
@@ -256,7 +256,7 @@ func TestProcessor_ProcessContinuous_ContextCancellation(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -282,7 +282,7 @@ func TestProcessor_ProcessTest_BurstMode(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	err := proc.ProcessTest(ctx, 10.0, 1*time.Second, 5)
@@ -310,7 +310,7 @@ func TestProcessor_ProcessTest_ContinuousMode(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	// Use higher RPS and longer duration to ensure alerts are published
@@ -339,7 +339,7 @@ func TestProcessor_ProcessTest_Error(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(true, "publish error")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	err := proc.ProcessTest(ctx, 10.0, 1*time.Second, 5)
@@ -357,7 +357,7 @@ func TestProcessor_ProcessTest_ContextCancellation(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -377,7 +377,7 @@ func TestProcessor_runBurstModeWithSize_ProgressLogging(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	// Use burst size that triggers progress logging (100, 200, etc.)
@@ -400,7 +400,7 @@ func TestProcessor_runContinuousModeWithParams_DurationReached(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	// Use higher RPS and longer duration to ensure alerts are published
@@ -424,7 +424,7 @@ func TestProcessor_runTestBurstMode_ProgressLogging(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	err := proc.runTestBurstMode(ctx, 150, nil)
@@ -451,7 +451,7 @@ func TestProcessor_runTestContinuousMode_TestAlertSent(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	// Use higher RPS to ensure alerts are published
@@ -489,7 +489,7 @@ func TestProcessor_runBurstMode(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	err := proc.runBurstMode(ctx)
@@ -513,7 +513,7 @@ func TestProcessor_runContinuousMode(t *testing.T) {
 	}
 	gen := generator.New(*cfg)
 	pub := newMockPublisher(false, "")
-	proc := NewProcessor(gen, pub, cfg)
+	proc := NewProcessor(gen, pub, cfg, nil)
 
 	ctx := context.Background()
 	err := proc.runContinuousMode(ctx)

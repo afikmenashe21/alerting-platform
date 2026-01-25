@@ -119,13 +119,8 @@ func main() {
 		"name_dist", cfg.NameDist,
 	)
 
-	// Initialize processor with metrics (if available)
-	var proc *processor.Processor
-	if metricsCollector != nil {
-		proc = processor.NewProcessorWithMetrics(gen, alertPublisher, &cfg, metricsCollector)
-	} else {
-		proc = processor.NewProcessor(gen, alertPublisher, &cfg)
-	}
+	// Initialize processor (metrics collector may be nil, processor handles it)
+	proc := processor.NewProcessor(gen, alertPublisher, &cfg, metricsCollector)
 
 	// Handle single test mode - send only one test alert and exit
 	if singleTestMode {

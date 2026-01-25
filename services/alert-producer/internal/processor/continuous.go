@@ -59,9 +59,7 @@ func (p *Processor) runContinuousModeWithParams(ctx context.Context, rps float64
 			alertStart := time.Now()
 			alert := p.generator.Generate()
 			if err := p.publisher.Publish(ctx, alert); err != nil {
-				if p.metrics != nil {
-					p.metrics.RecordError()
-				}
+				p.metrics.RecordError()
 				if err := handlePublishError(ctx, alert, err, totalSent+1); err == context.Canceled {
 					slog.Warn("Publish cancelled during continuous", "sent", totalSent)
 					return context.Canceled
@@ -70,11 +68,8 @@ func (p *Processor) runContinuousModeWithParams(ctx context.Context, rps float64
 			}
 
 			totalSent++
-
-			if p.metrics != nil {
-				p.metrics.RecordProcessed(time.Since(alertStart))
-				p.metrics.RecordPublished()
-			}
+			p.metrics.RecordProcessed(time.Since(alertStart))
+			p.metrics.RecordPublished()
 
 			// Update progress callback if provided
 			if progressCallback != nil {
