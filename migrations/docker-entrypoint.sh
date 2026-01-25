@@ -39,6 +39,10 @@ if [ "$TABLE_COUNT" = "4" ]; then
     # Run only the index migrations (safe for existing data)
     echo "Adding composite indexes for performance..."
     PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" < /migrations/add-composite-indexes.sql
+
+    # Run counts cache migration for fast exact counts
+    echo "Setting up counts cache table..."
+    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" < /migrations/add-counts-cache.sql
 else
     echo "New database detected - running full schema initialization"
     echo "================================"
