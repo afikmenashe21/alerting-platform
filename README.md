@@ -1,4 +1,4 @@
-# Alerting Platform
+# **Alerting Platform - MVP**
 
 > **[Live Playground (GitHub Pages)](https://afikmenashe21.github.io/alerting-platform/)**
 
